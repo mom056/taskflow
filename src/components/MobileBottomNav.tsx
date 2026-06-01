@@ -1,8 +1,8 @@
-import { LayoutDashboard, CheckSquare, MapPin, Users } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, MapPin, Users, BarChart3 } from 'lucide-react';
 
 interface MobileBottomNavProps {
-  activeTab: 'overview' | 'tasks' | 'visits' | 'employees';
-  onChange: (tab: 'overview' | 'tasks' | 'visits' | 'employees') => void;
+  activeTab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics';
+  onChange: (tab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics') => void;
 }
 
 const items = [
@@ -10,6 +10,7 @@ const items = [
   { id: 'tasks' as const, icon: CheckSquare, label: 'المهام' },
   { id: 'visits' as const, icon: MapPin, label: 'الزيارات' },
   { id: 'employees' as const, icon: Users, label: 'الفريق' },
+  { id: 'analytics' as const, icon: BarChart3, label: 'التقارير' },
 ];
 
 export default function MobileBottomNav({ activeTab, onChange }: MobileBottomNavProps) {

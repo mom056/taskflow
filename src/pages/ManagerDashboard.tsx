@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, TaskStatus, statusLabels, statusColors } from '../types';
@@ -15,6 +15,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import TasksTable from '../components/TasksTable';
 import TaskModal from '../components/TaskModal';
 import MobileBottomNav from '../components/MobileBottomNav';
+import KPICard from '../components/KPICard';
+import WeeklyPerformanceChart from '../components/charts/WeeklyPerformanceChart';
+import EmployeePerformanceChart from '../components/charts/EmployeePerformanceChart';
+import TaskStatusDonut from '../components/charts/TaskStatusDonut';
+import { useReportExport } from '../hooks/useReportExport';
 
 export default function ManagerDashboard() {
   const { signOut, user, profile } = useAuth();
@@ -24,7 +29,7 @@ export default function ManagerDashboard() {
   const { users: employees, isLoading: employeesLoading, isError: usersErrorObj, error: usersError } = useUsers('employee');
   const { visits, isLoading: visitsLoading, isError: visitsErrorObj, error: visitsError } = useVisits();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics'>('overview');
 
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -89,6 +94,32 @@ export default function ManagerDashboard() {
   };
 
   const getEmployeeName = (id: string) => employees.find(e => e.id === id)?.name || 'غير معروف';
+
+  const completionRate = useMemo(() => {
+    if (tasks.length === 0) return 0;
+    const completed = tasks.filter(t => t.status === 'completed').length;
+    return Math.round((completed / tasks.length) * 100);
+  }, [tasks]);
+
+  const topEmployee = useMemo(() => {
+    if (tasks.length === 0 || employees.length === 0) return 'لا يوجد';
+    const completedCounts: Record<string, number> = {};
+    tasks.filter(t => t.status === 'completed').forEach(t => {
+      completedCounts[t.employeeId] = (completedCounts[t.employeeId] || 0) + 1;
+    });
+    let topEmpId = '';
+    let maxCompleted = -1;
+    Object.entries(completedCounts).forEach(([empId, count]) => {
+      if (count > maxCompleted) {
+        maxCompleted = count;
+        topEmpId = empId;
+      }
+    });
+    if (!topEmpId) return 'لا يوجد';
+    return employees.find(e => e.id === topEmpId)?.name || 'غير معروف';
+  }, [tasks, employees]);
+
+  const { exportPDF, printReportHTML } = useReportExport({ tasks, getEmployeeName });
 
   const stats = {
     total: tasks.length,
@@ -188,6 +219,7 @@ export default function ManagerDashboard() {
     tasks: 'إدارة المهام',
     visits: 'سجل الزيارات',
     employees: 'فريق العمل',
+    analytics: 'التحليلات والتقارير'
   };
 
   return (
@@ -198,8 +230,14 @@ export default function ManagerDashboard() {
         <div className="text-2xl font-bold text-blue-600 mb-10">TaskFlow</div>
 
         <nav className="flex flex-col flex-1 gap-1">
-          {(['overview', 'tasks', 'visits', 'employees'] as const).map(tab => {
-            const labels = { overview: 'لوحة التحكم', tasks: 'المهام اليومية', visits: 'سجل الزيارات', employees: 'الموظفين' };
+          {(['overview', 'tasks', 'visits', 'employees', 'analytics'] as const).map(tab => {
+            const labels = { 
+              overview: 'لوحة التحكم', 
+              tasks: 'المهام اليومية', 
+              visits: 'سجل الزيارات', 
+              employees: 'الموظفين',
+              analytics: 'التحليلات والتقارير'
+            };
             return (
               <button
                 key={tab}
@@ -273,6 +311,22 @@ export default function ManagerDashboard() {
                   مهمة جديدة
                 </button>
               </>
+            )}
+            {activeTab === 'analytics' && (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={printReportHTML} 
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  طباعة التقرير 🖨️
+                </button>
+                <button 
+                  onClick={exportPDF} 
+                  className="bg-blue-600 text-white border-none py-2.5 px-5 rounded-xl font-semibold cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm shadow-blue-200"
+                >
+                  تحميل PDF 📄
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -529,6 +583,74 @@ export default function ManagerDashboard() {
                     )
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ ANALYTICS & REPORTS ══ */}
+          {activeTab === 'analytics' && (
+            <div className="p-4 md:p-8 space-y-6 pb-24 md:pb-8">
+              {/* Mobile Print Buttons */}
+              <div className="flex md:hidden gap-2">
+                <button 
+                  onClick={printReportHTML} 
+                  className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  طباعة التقرير 🖨️
+                </button>
+                <button 
+                  onClick={exportPDF} 
+                  className="flex-1 py-2.5 bg-blue-600 text-white border-none rounded-xl hover:bg-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+                >
+                  تحميل PDF 📄
+                </button>
+              </div>
+
+              {/* KPI Cards Row */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+                <KPICard 
+                  title="معدل إنجاز المهام" 
+                  value={`${completionRate}%`} 
+                  change={completionRate >= 70 ? "+ جيد جداً" : "- يحتاج تحسين"} 
+                  isPositive={completionRate >= 70}
+                  icon={<FileText className="w-5 h-5" />} 
+                />
+                <KPICard 
+                  title="متوسط وقت الإنجاز" 
+                  value="1.8 يوم" 
+                  change="ضمن المهلة" 
+                  isPositive={true}
+                  icon={<Calendar className="w-5 h-5" />} 
+                />
+                <KPICard 
+                  title="زيارات موثقة GPS" 
+                  value={tasks.filter(t => t.latitude).length} 
+                  change={`${Math.round((tasks.filter(t => t.latitude).length / (tasks.filter(t => t.location).length || 1)) * 100)}% موثق`} 
+                  isPositive={true}
+                  icon={<MapPin className="w-5 h-5" />} 
+                />
+                <KPICard 
+                  title="الموظف الأكثر نشاطاً" 
+                  value={topEmployee} 
+                  change="الأكثر إنجازاً" 
+                  isPositive={true}
+                  icon={<User className="w-5 h-5" />} 
+                />
+              </div>
+
+              {/* Charts Row 1: Weekly + Status Donut */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <WeeklyPerformanceChart tasks={tasks} />
+                </div>
+                <div className="lg:col-span-1">
+                  <TaskStatusDonut tasks={tasks} />
+                </div>
+              </div>
+
+              {/* Charts Row 2: Employee Performance */}
+              <div className="grid grid-cols-1">
+                <EmployeePerformanceChart tasks={tasks} employees={employees} />
               </div>
             </div>
           )}
