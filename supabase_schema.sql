@@ -140,9 +140,9 @@ CREATE POLICY "Authenticated users can upload task images"
   ON storage.objects FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND bucket_id = 'task-images');
 
-CREATE POLICY "Anyone can view task images"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'task-images');
+-- Note: No SELECT policy is needed for 'task-images' because the bucket is Public.
+-- Public buckets allow viewing files via public URL directly. Adding a SELECT policy 
+-- allows listing all files in the bucket, which is a security risk.
 
 CREATE POLICY "Users can delete their own task images"
   ON storage.objects FOR DELETE
