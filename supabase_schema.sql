@@ -231,17 +231,54 @@ VALUES ('avatars', 'avatars', true) ON CONFLICT DO NOTHING;
 DROP POLICY IF EXISTS "Users can upload their own avatar" ON storage.objects;
 CREATE POLICY "Users can upload their own avatar"
   ON storage.objects FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL AND bucket_id = 'avatars');
+  WITH CHECK (
+    auth.uid() IS NOT NULL 
+    AND bucket_id = 'avatars' 
+    AND name LIKE (auth.uid()::text || '%')
+  );
 
 DROP POLICY IF EXISTS "Users can update their own avatar" ON storage.objects;
 CREATE POLICY "Users can update their own avatar"
   ON storage.objects FOR UPDATE
-  WITH CHECK (auth.uid() IS NOT NULL AND bucket_id = 'avatars');
+  WITH CHECK (
+    auth.uid() IS NOT NULL 
+    AND bucket_id = 'avatars' 
+    AND name LIKE (auth.uid()::text || '%')
+  );
 
 DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
 CREATE POLICY "Anyone can view avatars"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'avatars');
+
+
+-- ============================================================
+-- Foreign Key Cascade & On Delete Hardening Upgrades
+-- ============================================================
+
+-- 1. Ensure user profile deletion cascades when auth user is deleted
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_id_fkey;
+ALTER TABLE public.users 
+  ADD CONSTRAINT users_id_fkey 
+  FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- 2. Clear employee links in tasks when user is deleted (preserve task data for metrics)
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_employee_id_fkey;
+ALTER TABLE public.tasks 
+  ADD CONSTRAINT tasks_employee_id_fkey 
+  FOREIGN KEY (employee_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_created_by_fkey;
+ALTER TABLE public.tasks 
+  ADD CONSTRAINT tasks_created_by_fkey 
+  FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+-- 3. Clear employee links in visits when user is deleted
+ALTER TABLE public.visits DROP CONSTRAINT IF EXISTS visits_employee_id_fkey;
+ALTER TABLE public.visits 
+  ADD CONSTRAINT visits_employee_id_fkey 
+  FOREIGN KEY (employee_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
 
 
 
