@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: 'manager' | 'employee';
   createdAt: number;
+  avatarUrl?: string;
 }
 
 export interface Task {

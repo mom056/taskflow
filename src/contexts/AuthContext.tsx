@@ -10,6 +10,7 @@ interface UserProfile {
   email: string;
   role: Role;
   created_at: number;
+  avatar_url?: string;
 }
 
 interface AuthContextType {

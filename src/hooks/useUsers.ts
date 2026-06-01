@@ -16,7 +16,8 @@ export function useUsers(role?: 'manager' | 'employee') {
       name: d.name,
       email: d.email,
       role: d.role,
-      createdAt: d.created_at
+      createdAt: d.created_at,
+      avatarUrl: d.avatar_url
     })) as User[];
   };
 

@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import ManagerDashboard from './pages/ManagerDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import ProfileSettings from './pages/ProfileSettings';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -24,6 +25,12 @@ function App() {
             <Route path="/employee/*" element={
               <ProtectedRoute allowedRole="employee">
                 <EmployeeDashboard />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <ProfileSettings />
               </ProtectedRoute>
             } />
 
