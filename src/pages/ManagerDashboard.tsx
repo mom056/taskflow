@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, TaskStatus, statusLabels, statusColors } from '../types';
-import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft } from 'lucide-react';
+import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft, Map } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import TaskMap from '../components/TaskMap';
 
 import { useTasks } from '../hooks/useTasks';
 import { useUsers } from '../hooks/useUsers';
@@ -31,6 +32,7 @@ export default function ManagerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
+  const [visitsView, setVisitsView] = useState<'list' | 'map'>('list');
 
   const isLoading = tasksLoading || employeesLoading || visitsLoading;
 
@@ -452,45 +454,79 @@ export default function ManagerDashboard() {
           {activeTab === 'visits' && (
             <div className="p-4 md:p-8 pb-24 md:pb-8">
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between flex-wrap gap-3">
                   <h2 className="text-base font-bold text-slate-800">سجل الزيارات الميدانية</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setVisitsView('list')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-none cursor-pointer transition-all ${
+                        visitsView === 'list'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      قائمة الزيارات
+                    </button>
+                    <button
+                      onClick={() => setVisitsView('map')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-none cursor-pointer transition-all flex items-center gap-1.5 ${
+                        visitsView === 'map'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Map className="w-3.5 h-3.5" />
+                      الخريطة التفاعلية
+                    </button>
+                  </div>
                   <span className="text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full font-medium">
                     {tasks.filter(t => t.location).length} زيارة
                   </span>
                 </div>
                 <div className="p-4 space-y-3">
-                  {tasks.filter(t => t.location).length > 0 ? (
-                    tasks.filter(t => t.location).map(task => (
-                      <div key={task.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2">
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <h3 className="font-semibold text-slate-900 text-sm">{task.title}</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">{getEmployeeName(task.employeeId)}</p>
-                          </div>
-                          <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
-                            {statusLabels[task.status]}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-600">
-                          <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>{task.location}</span>
-                        </div>
-                        {task.notes && (
-                          <p className="text-xs text-slate-500 bg-white rounded-lg px-3 py-2 border border-slate-100">{task.notes}</p>
-                        )}
-                        {task.imageUrl && (
-                          <a href={task.imageUrl} target="_blank" rel="noopener noreferrer"
-                            className="block overflow-hidden rounded-lg border border-slate-200 max-w-[200px]">
-                            <img src={task.imageUrl} alt="صورة الزيارة" className="w-full h-24 object-cover hover:scale-105 transition-transform" />
-                          </a>
-                        )}
-                        <div className="text-[10px] text-slate-400 pt-1">
-                          {task.createdAt ? new Date(task.createdAt).toLocaleDateString('ar-SA') : ''}
-                        </div>
-                      </div>
-                    ))
+                  {visitsView === 'map' ? (
+                    <TaskMap tasks={tasks} getEmployeeName={getEmployeeName} />
                   ) : (
-                    <div className="text-center py-10 text-slate-400 text-sm">لا توجد زيارات ميدانية مسجلة</div>
+                    tasks.filter(t => t.location).length > 0 ? (
+                      tasks.filter(t => t.location).map(task => (
+                        <div key={task.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <h3 className="font-semibold text-slate-900 text-sm">{task.title}</h3>
+                              <p className="text-xs text-slate-400 mt-0.5">{getEmployeeName(task.employeeId)}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {task.latitude && (
+                                <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">
+                                  GPS موثق
+                                </span>
+                              )}
+                              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
+                                {statusLabels[task.status]}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-slate-600">
+                            <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>{task.location}</span>
+                          </div>
+                          {task.notes && (
+                            <p className="text-xs text-slate-500 bg-white rounded-lg px-3 py-2 border border-slate-100">{task.notes}</p>
+                          )}
+                          {task.imageUrl && (
+                            <a href={task.imageUrl} target="_blank" rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-lg border border-slate-200 max-w-[200px]">
+                              <img src={task.imageUrl} alt="صورة الزيارة" className="w-full h-24 object-cover hover:scale-105 transition-transform" />
+                            </a>
+                          )}
+                          <div className="text-[10px] text-slate-400 pt-1">
+                            {task.createdAt ? new Date(task.createdAt).toLocaleDateString('ar-SA') : ''}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-10 text-slate-400 text-sm">لا توجد زيارات ميدانية مسجلة</div>
+                    )
                   )}
                 </div>
               </div>

@@ -57,7 +57,13 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
         } else if (item.type === 'update_status') {
           const { error } = await supabase
             .from('tasks')
-            .update({ status: item.payload.status, updated_at: Date.now() })
+            .update({ 
+              status: item.payload.status, 
+              latitude: item.payload.latitude,
+              longitude: item.payload.longitude,
+              location_verified_at: item.payload.location_verified_at,
+              updated_at: Date.now() 
+            })
             .eq('id', item.taskId);
           if (error) throw error;
         } else if (item.type === 'update_notes') {

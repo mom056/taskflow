@@ -147,3 +147,71 @@ CREATE POLICY "Authenticated users can upload task images"
 CREATE POLICY "Users can delete their own task images"
   ON storage.objects FOR DELETE
   USING (auth.uid() IS NOT NULL AND bucket_id = 'task-images');
+
+-- ============================================================
+-- Phase 2 upgrades: GPS Verification & Push Notifications
+-- ============================================================
+
+-- Add GPS fields to public.tasks
+ALTER TABLE public.tasks 
+  ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8),
+  ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8),
+  ADD COLUMN IF NOT EXISTS location_verified_at BIGINT;
+
+-- Table for Web Push Notification Subscriptions
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+
+-- Enable RLS for push_subscriptions
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Policies for push_subscriptions
+DROP POLICY IF EXISTS "Users manage their own subscriptions" ON public.push_subscriptions;
+CREATE POLICY "Users manage their own subscriptions"
+  ON public.push_subscriptions
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Unique constraint on endpoint to prevent duplicate entries
+ALTER TABLE public.push_subscriptions
+  ADD CONSTRAINT push_subscriptions_endpoint_key UNIQUE (endpoint);
+
+-- ── DATABASE WEBHOOK FOR PUSH NOTIFICATIONS ───────────────────
+-- You can configure this either via Supabase Dashboard -> Database -> Webhooks
+-- OR by running the following SQL commands:
+
+-- Create the trigger function to invoke the edge function
+-- CREATE OR REPLACE FUNCTION public.handle_new_task_push()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--   PERFORM
+--     net.http_post(
+--       url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-push',
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY'
+--       ),
+--       body := jsonb_build_object(
+--         'type', 'INSERT',
+--         'table', 'tasks',
+--         'record', row_to_json(NEW)
+--       )::text,
+--       timeout_milliseconds := 5000
+--     );
+--   RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- CREATE TRIGGER tr_new_task_push
+--   AFTER INSERT ON public.tasks
+--   FOR EACH ROW
+--   EXECUTE FUNCTION public.handle_new_task_push();
+
+

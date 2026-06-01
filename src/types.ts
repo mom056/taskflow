@@ -21,6 +21,9 @@ export interface Task {
   createdBy: string;
   createdAt: number;
   updatedAt: number;
+  latitude?: number;
+  longitude?: number;
+  locationVerifiedAt?: number;
 }
 
 export interface Visit {

@@ -34,6 +34,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallbackDenylist: [/^\/auth/, /^\/v1/],
+        importScripts: ['/push-worker.js']
       }
     })
   ],

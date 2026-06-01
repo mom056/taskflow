@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import { useTasks } from '../hooks/useTasks';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useQueryClient } from '@tanstack/react-query';
+import { useGeoLocation } from '../hooks/useGeoLocation';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function EmployeeDashboard() {
   const { signOut, user, profile } = useAuth();
@@ -17,6 +19,8 @@ export default function EmployeeDashboard() {
   const { isOnline, queueLength, addToQueue } = useOfflineQueue(() => {
     queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
   });
+  const { getCoordinates, loading: isLocating } = useGeoLocation();
+  const { permission, isSubscribed, subscribeUser, loading: isSubscribing } = usePushNotifications(user?.id);
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
@@ -85,14 +89,45 @@ export default function EmployeeDashboard() {
   const handleUpdateStatus = async (taskId: string, newStatus: TaskStatus) => {
     if (!user) return;
     const isTempTask = taskId.length < 15;
+
+    let latitude = null;
+    let longitude = null;
+    let locationVerifiedAt = null;
+
+    if (newStatus === 'completed') {
+      const toastId = toast.loading('جاري تحديد موقعك الجغرافي للتحقق من إتمام المهمة ميدانياً...');
+      try {
+        const coords = await getCoordinates();
+        latitude = coords.latitude;
+        longitude = coords.longitude;
+        locationVerifiedAt = Date.now();
+        toast.success('تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓', { id: toastId });
+      } catch (err: any) {
+        toast.error(err.message || 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لإكمال المهمة.', { id: toastId });
+        return; // Block completion if GPS coordinate capture fails
+      }
+    }
+
     if (!isOnline || isTempTask) {
-      addToQueue('update_status', { status: newStatus }, taskId);
+      addToQueue('update_status', { 
+        status: newStatus,
+        latitude,
+        longitude,
+        location_verified_at: locationVerifiedAt
+      }, taskId);
       return;
     }
+
     try {
       const { data, error } = await supabase
         .from('tasks')
-        .update({ status: newStatus, updated_at: Date.now() })
+        .update({ 
+          status: newStatus, 
+          updated_at: Date.now(),
+          latitude,
+          longitude,
+          location_verified_at: locationVerifiedAt
+        })
         .eq('id', taskId)
         .select();
       if (error) throw error;
@@ -101,7 +136,7 @@ export default function EmployeeDashboard() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
-      toast.success('تم تحديث حالة المهمة');
+      toast.success('تم تحديث حالة المهمة وتوثيق موقعك الجغرافي');
     } catch (err: any) {
       console.error('[Task Update]', err);
       toast.error(`خطأ: ${err.message || 'تعذر تحديث الحالة'}`);
@@ -310,6 +345,33 @@ export default function EmployeeDashboard() {
           )}
 
           <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-4">
+
+            {/* Notification Prompt Banner */}
+            {!isSubscribed && permission !== 'granted' && isOnline && (
+              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">📢</span>
+                  <div>
+                    <h4 className="text-sm font-semibold text-blue-800">تفعيل إشعارات المهام المباشرة</h4>
+                    <p className="text-xs text-blue-600 mt-0.5">تلقى تنبيهات فورية على هاتفك بمجرد تكليفك بمهام أو زيارات جديدة من المدير.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await subscribeUser();
+                      toast.success('تم تفعيل الإشعارات بنجاح!');
+                    } catch (err: any) {
+                      toast.error(err.message || 'فشل تفعيل الإشعارات');
+                    }
+                  }}
+                  disabled={isSubscribing}
+                  className="bg-blue-600 text-white border-none px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  {isSubscribing ? 'جاري التفعيل...' : 'تفعيل الآن'}
+                </button>
+              </div>
+            )}
 
             {/* Mobile add button */}
             <div className="flex md:hidden justify-end">
