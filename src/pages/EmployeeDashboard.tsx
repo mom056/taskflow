@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, statusLabels, statusColors, TaskStatus } from '../types';
-import { LogOut, MapPin, CheckCircle, RefreshCcw, Hand, Camera, X, ImageIcon, ClipboardList, CheckSquare, PlusCircle } from 'lucide-react';
+import { LogOut, MapPin, CheckCircle, RefreshCcw, Hand, Camera, X, ImageIcon, ClipboardList, CheckSquare, PlusCircle, Cloud, CloudOff } from 'lucide-react';
+import { useOfflineQueue, QueueItem } from '../hooks/useOfflineQueue';
 import toast from 'react-hot-toast';
 import { useTasks } from '../hooks/useTasks';
 import { useImageUpload } from '../hooks/useImageUpload';
@@ -12,7 +13,10 @@ export default function EmployeeDashboard() {
   const { signOut, user, profile } = useAuth();
   const queryClient = useQueryClient();
   const { tasks, isLoading, isError } = useTasks(user?.id);
-  const { uploadImage, isUploading, progress } = useImageUpload();
+  const { uploadImage, isUploading, progress, statusText } = useImageUpload();
+  const { isOnline, queueLength, addToQueue } = useOfflineQueue(() => {
+    queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
+  });
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
@@ -45,7 +49,7 @@ export default function EmployeeDashboard() {
     setIsCreating(true);
     try {
       const due = newTask.dueDate ? new Date(`${newTask.dueDate}T12:00:00`).getTime() : null;
-      const { error } = await supabase.from('tasks').insert([{
+      const taskPayload = {
         title: newTask.title,
         description: newTask.description || null,
         location: newTask.location || null,
@@ -55,7 +59,16 @@ export default function EmployeeDashboard() {
         due_date: due,
         created_at: Date.now(),
         updated_at: Date.now(),
-      }]);
+      };
+
+      if (!isOnline) {
+        addToQueue('create_task', taskPayload);
+        setNewTask({ title: '', description: '', location: '', dueDate: '' });
+        setTaskFormOpen(false);
+        return;
+      }
+
+      const { error } = await supabase.from('tasks').insert([taskPayload]);
       if (error) throw error;
       setNewTask({ title: '', description: '', location: '', dueDate: '' });
       setTaskFormOpen(false);
@@ -71,6 +84,11 @@ export default function EmployeeDashboard() {
 
   const handleUpdateStatus = async (taskId: string, newStatus: TaskStatus) => {
     if (!user) return;
+    const isTempTask = taskId.length < 15;
+    if (!isOnline || isTempTask) {
+      addToQueue('update_status', { status: newStatus }, taskId);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('tasks')
@@ -92,13 +110,34 @@ export default function EmployeeDashboard() {
 
   const handleSaveNotes = async () => {
     if (!user || !selectedTask) return;
+    const isTempTask = selectedTask.id.length < 15;
     try {
       let imageUrl = selectedTask.imageUrl || null;
       if (imageFile) {
+        if (!isOnline) {
+          toast.loading('جاري حفظ الصورة محلياً للرفع اللاحق...');
+          const reader = new FileReader();
+          reader.readAsDataURL(imageFile);
+          reader.onloadend = async () => {
+            const base64data = reader.result as string;
+            addToQueue('update_notes', { notes: taskNotes, imageUrl: base64data }, selectedTask.id);
+            setSelectedTask(null); setTaskNotes(''); setImageFile(null); setImagePreview(null);
+            toast.dismiss();
+          };
+          return;
+        }
+
         const result = await uploadImage(imageFile, selectedTask.id);
         if (result.error) { toast.error(`فشل رفع الصورة: ${result.error}`); return; }
         imageUrl = result.url;
       }
+
+      if (!isOnline || isTempTask) {
+        addToQueue('update_notes', { notes: taskNotes, imageUrl }, selectedTask.id);
+        setSelectedTask(null); setTaskNotes(''); setImageFile(null); setImagePreview(null);
+        return;
+      }
+
       const { error } = await supabase.from('tasks')
         .update({ notes: taskNotes, image_url: imageUrl, updated_at: Date.now() })
         .eq('id', selectedTask.id);
@@ -116,8 +155,55 @@ export default function EmployeeDashboard() {
     setImageFile(null); setImagePreview(task.imageUrl || null);
   };
 
-  const activeTasks = tasks.filter(t => t.status !== 'completed');
-  const completedTasks = tasks.filter(t => t.status === 'completed');
+  // Merge offline queue items for visual display
+  const getMergedTasks = () => {
+    const merged = [...tasks];
+    
+    // Read from localStorage to avoid queue sync delay in state
+    const savedQueue = localStorage.getItem('taskflow_offline_queue');
+    const offlineQueue: QueueItem[] = savedQueue ? JSON.parse(savedQueue) : [];
+    
+    offlineQueue.forEach(item => {
+      if (item.type === 'create_task') {
+        const exists = merged.some(t => t.title === item.payload.title && t.createdAt === item.payload.created_at);
+        if (!exists) {
+          const tempTask = {
+            id: item.id, // temp local id
+            title: item.payload.title,
+            description: item.payload.description,
+            status: item.payload.status || 'new',
+            location: item.payload.location,
+            dueDate: item.payload.due_date,
+            createdBy: item.payload.created_by,
+            createdAt: item.payload.created_at,
+            updatedAt: item.payload.updated_at,
+            employeeId: item.payload.employee_id,
+            isOfflinePending: true
+          };
+          merged.unshift(tempTask as any);
+        }
+      } else if (item.type === 'update_status') {
+        const target = merged.find(t => t.id === item.taskId);
+        if (target) {
+          target.status = item.payload.status;
+          (target as any).isOfflinePending = true;
+        }
+      } else if (item.type === 'update_notes') {
+        const target = merged.find(t => t.id === item.taskId);
+        if (target) {
+          target.notes = item.payload.notes;
+          target.imageUrl = item.payload.imageUrl;
+          (target as any).isOfflinePending = true;
+        }
+      }
+    });
+    
+    return merged;
+  };
+
+  const allMergedTasks = getMergedTasks();
+  const activeTasks = allMergedTasks.filter(t => t.status !== 'completed');
+  const completedTasks = allMergedTasks.filter(t => t.status === 'completed');
   const displayTasks = activeTab === 'active' ? activeTasks : completedTasks;
 
   const avatar = (profile?.name || user?.email || 'م')[0].toUpperCase();
@@ -162,7 +248,15 @@ export default function EmployeeDashboard() {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold">{avatar}</div>
             <div>
-              <div className="text-sm font-bold">{activeTab === 'active' ? 'مهامي النشطة' : 'المنجزة'}</div>
+              <div className="text-sm font-bold flex items-center gap-1.5">
+                {activeTab === 'active' ? 'مهامي النشطة' : 'المنجزة'}
+                {!isOnline && (
+                  <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                    <CloudOff className="w-2.5 h-2.5" />
+                    {queueLength > 0 ? `${queueLength} معلقة` : 'أوفلاين'}
+                  </span>
+                )}
+              </div>
               <div className="text-[10px] text-slate-400">{profile?.name || user?.email?.split('@')[0]}</div>
             </div>
           </div>
@@ -171,9 +265,24 @@ export default function EmployeeDashboard() {
 
         {/* Desktop header */}
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-4 items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 m-0">{activeTab === 'active' ? 'مهامي النشطة' : 'المهام المنجزة'}</h1>
-            <p className="text-slate-400 text-sm mt-0.5 m-0">تسجيل المهام الميدانية وتحديث حالتها</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 m-0">{activeTab === 'active' ? 'مهامي النشطة' : 'المهام المنجزة'}</h1>
+              <p className="text-slate-400 text-sm mt-0.5 m-0">تسجيل المهام الميدانية وتحديث حالتها</p>
+            </div>
+            {!isOnline ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 px-3 py-1 rounded-xl animate-pulse">
+                <CloudOff className="w-4 h-4" />
+                غير متصل بالإنترنت ({queueLength} تعديلات معلقة الحفظ)
+              </span>
+            ) : (
+              queueLength > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl">
+                  <Cloud className="w-4 h-4" />
+                  جاري مزامنة {queueLength} تعديل...
+                </span>
+              )
+            )}
           </div>
           <button onClick={() => setTaskFormOpen(true)}
             className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm">
@@ -217,9 +326,17 @@ export default function EmployeeDashboard() {
                     <div className="p-5 flex-1">
                       <div className="flex justify-between items-start mb-2 gap-2">
                         <h3 className="font-bold text-slate-900 text-base leading-snug">{task.title}</h3>
-                        <span className={`shrink-0 px-2 py-0.5 text-xs font-bold rounded-full ${statusColors[task.status]}`}>
-                          {statusLabels[task.status]}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {(task as any).isOfflinePending && (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-0.5" title="قيد المزامنة عند الاتصال">
+                              <RefreshCcw className="w-2.5 h-2.5 animate-spin" />
+                              قيد المزامنة
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${statusColors[task.status]}`}>
+                            {statusLabels[task.status]}
+                          </span>
+                        </div>
                       </div>
                       {task.description && <p className="text-slate-500 text-sm mb-3 leading-relaxed">{task.description}</p>}
                       <div className="space-y-2">
@@ -397,10 +514,10 @@ export default function EmployeeDashboard() {
                       }} />
                   </label>
                 )}
-                {isUploading && progress > 0 && (
+                {isUploading && (
                   <div className="mt-2">
                     <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                      <span>جاري رفع الصورة...</span><span>{progress}%</span>
+                      <span>{statusText || 'جاري معالجة الصورة...'}</span><span>{progress}%</span>
                     </div>
                     <div className="w-full bg-slate-200 rounded-full h-1.5">
                       <div className="bg-blue-600 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
@@ -412,7 +529,7 @@ export default function EmployeeDashboard() {
             <div className="p-4 border-t border-slate-100 bg-slate-50">
               <button onClick={handleSaveNotes} disabled={isUploading}
                 className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 text-sm">
-                {isUploading ? `جاري الرفع... ${progress}%` : 'حفظ التغييرات'}
+                {isUploading ? (statusText || `جاري الحفظ... ${progress}%`) : 'حفظ التغييرات'}
               </button>
             </div>
           </div>
