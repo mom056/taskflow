@@ -1,7 +1,7 @@
 // Deno Edge Function for sending Web Push Notifications via Supabase Database Webhooks
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import WebPush from "npm:web-push@3.6.0"
+import * as webpush from "jsr:@negrel/webpush@0.9.0"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -13,12 +13,21 @@ const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:info@taskflow.com
 // Initialize Supabase admin client
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// Setup VAPID keys if provided
+let appServer: any = null;
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  WebPush.setVapidDetails(
-    VAPID_SUBJECT,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
+  try {
+    await webpush.importVapidKeys({
+      publicKey: VAPID_PUBLIC_KEY,
+      privateKey: VAPID_PRIVATE_KEY,
+    });
+    appServer = new webpush.ApplicationServer({
+      subject: VAPID_SUBJECT,
+    });
+    console.log('[PushService] VAPID keys imported successfully.');
+  } catch (err) {
+    console.error('[PushService] Error importing VAPID keys:', err);
+  }
 }
 
 serve(async (req) => {
@@ -66,6 +75,14 @@ serve(async (req) => {
       });
     }
 
+    if (!appServer) {
+      console.error('[PushService] ApplicationServer is not configured (missing VAPID keys)');
+      return new Response(JSON.stringify({ error: 'Push service not configured' }), {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+
     // 2. Prepare notification payload
     const notificationPayload = JSON.stringify({
       title: '📋 مهمة ميدانية جديدة!',
@@ -87,7 +104,7 @@ serve(async (req) => {
         };
 
         try {
-          await WebPush.sendNotification(pushSubscription, notificationPayload);
+          await appServer.sendNotification(pushSubscription, notificationPayload);
           return { endpoint: sub.endpoint, success: true };
         } catch (err: any) {
           console.error(`[PushService] Push failed for endpoint: ${sub.endpoint}`, err);
