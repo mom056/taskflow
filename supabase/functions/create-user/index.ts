@@ -49,8 +49,8 @@ serve(async (req) => {
       .eq('id', callerUser.id)
       .single();
 
-    if (profileError || !callerProfile || callerProfile.role !== 'manager') {
-      return new Response(JSON.stringify({ error: 'Only managers can register new users' }), {
+    if (profileError || !callerProfile || (callerProfile.role !== 'manager' && callerProfile.role !== 'super_admin')) {
+      return new Response(JSON.stringify({ error: 'Only managers and super admins can register new users' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });

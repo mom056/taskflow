@@ -156,7 +156,7 @@ CREATE POLICY "tasks_select_policy" ON public.tasks
     is_super_admin() OR (
       company_id = get_my_company_id()
       AND (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
         OR employee_id = auth.uid()
       )
     )
@@ -169,7 +169,7 @@ CREATE POLICY "tasks_insert_policy" ON public.tasks
     is_super_admin() OR (
       company_id = get_my_company_id()
       AND (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
         OR (auth.uid() IS NOT NULL AND employee_id = auth.uid())
       )
     )
@@ -182,7 +182,7 @@ CREATE POLICY "tasks_update_policy" ON public.tasks
     is_super_admin() OR (
       company_id = get_my_company_id()
       AND (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
         OR employee_id = auth.uid()
       )
     )
@@ -191,7 +191,7 @@ CREATE POLICY "tasks_update_policy" ON public.tasks
     is_super_admin() OR (
       company_id = get_my_company_id()
       AND (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
         OR employee_id = auth.uid()
       )
     )
@@ -203,7 +203,7 @@ CREATE POLICY "tasks_delete_policy" ON public.tasks
   FOR DELETE USING (
     is_super_admin() OR (
       company_id = get_my_company_id()
-      AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+      AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
     )
   );
 
@@ -217,7 +217,7 @@ CREATE POLICY "visits_select_policy" ON public.visits
     is_super_admin() OR (
       company_id = get_my_company_id()
       AND (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'manager')
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
         OR employee_id = auth.uid()
       )
     )
