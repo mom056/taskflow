@@ -51,10 +51,12 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
   const metadata = sessionUser.user_metadata || {};
   const companyName = metadata.company_name;
 
-  // Check how many users exist in the system
-  const { count } = await supabase
-    .from('users')
-    .select('*', { count: 'exact', head: true });
+  // Check how many users exist in the system via RPC to bypass RLS limits
+  const { data: userCount, error: countErr } = await supabase.rpc('get_user_count');
+  if (countErr) {
+    console.error('[Auth] Failed to get user count:', countErr.message);
+  }
+  const count = userCount !== null ? Number(userCount) : null;
 
   let newRole: Role = 'employee';
   let companyId = '';

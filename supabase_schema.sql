@@ -104,6 +104,12 @@ RETURNS BOOLEAN AS $$
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
+-- Helper function to count total users, bypassing RLS (SECURITY DEFINER)
+CREATE OR REPLACE FUNCTION public.get_user_count()
+RETURNS INT AS $$
+  SELECT COUNT(*)::INT FROM public.users;
+$$ LANGUAGE sql SECURITY DEFINER;
+
 -- ── COMPANIES POLICIES ────────────────────────────────────────
 
 DROP POLICY IF EXISTS "companies_select_policy" ON public.companies;
