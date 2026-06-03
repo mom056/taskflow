@@ -36,7 +36,7 @@ export default function TaskStatusDonut({ tasks }: TaskStatusDonutProps) {
         </div>
       ) : (
         <div className="h-[200px] w-full flex items-center justify-center">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minHeight={180}>
             <PieChart>
               <Pie
                 data={chartData}

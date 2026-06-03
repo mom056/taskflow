@@ -219,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
           handleSession(session?.user ?? null);
         }
       }
@@ -239,6 +239,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshRole = async () => {
+    // Wait for any in-progress fetch to complete first
+    if (pendingFetchRef.current) {
+      await pendingFetchRef.current;
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       try {

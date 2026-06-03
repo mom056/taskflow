@@ -28,7 +28,7 @@ export default function EmployeePerformanceChart({ tasks, employees }: EmployeeP
         <p className="text-xs text-slate-400 mt-0.5">مقارنة المهام الكلية بالمهام المنجزة لكل موظف</p>
       </div>
       <div className="h-[250px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minHeight={200}>
           <BarChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis 
