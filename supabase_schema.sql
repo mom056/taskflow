@@ -108,7 +108,7 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 DROP POLICY IF EXISTS "companies_select_policy" ON public.companies;
 CREATE POLICY "companies_select_policy" ON public.companies 
-  FOR SELECT USING (id = get_my_company_id() OR is_super_admin());
+  FOR SELECT USING (auth.uid() IS NOT NULL);
 
 DROP POLICY IF EXISTS "companies_insert_policy" ON public.companies;
 CREATE POLICY "companies_insert_policy" ON public.companies 
