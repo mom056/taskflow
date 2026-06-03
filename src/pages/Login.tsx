@@ -10,6 +10,7 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { refreshRole, user } = useAuth();
@@ -53,7 +54,8 @@ export default function Login() {
           password: password,
           options: {
             data: {
-              name: name || trimmedUsername
+              name: name || trimmedUsername,
+              company_name: companyName.trim()
             }
           }
         });
@@ -120,19 +122,34 @@ export default function Login() {
           )}
           <form onSubmit={handleAuth} className="space-y-5">
             {!isLogin && (
-               <div>
-                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">الاسم الكامل</label>
-                 <div className="relative">
-                   <input
-                     type="text"
-                     value={name}
-                     onChange={(e) => setName(e.target.value)}
-                     className="block w-full pl-3 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition"
-                     placeholder="محمد أحمد"
-                     required={!isLogin}
-                   />
+               <>
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">الاسم الكامل</label>
+                   <div className="relative">
+                     <input
+                       type="text"
+                       value={name}
+                       onChange={(e) => setName(e.target.value)}
+                       className="block w-full pl-3 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition"
+                       placeholder="محمد أحمد"
+                       required={!isLogin}
+                     />
+                   </div>
                  </div>
-               </div>
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">اسم الشركة</label>
+                   <div className="relative">
+                     <input
+                       type="text"
+                       value={companyName}
+                       onChange={(e) => setCompanyName(e.target.value)}
+                       className="block w-full pl-3 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition"
+                       placeholder="شركة المقاولات الحديثة"
+                       required={!isLogin}
+                     />
+                   </div>
+                 </div>
+               </>
             )}
 
             <div>
@@ -176,7 +193,7 @@ export default function Login() {
             >
               {loading ? (
                 <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد')}
+              ) : (isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد وتثبيت الشركة')}
             </button>
           </form>
 
@@ -187,7 +204,7 @@ export default function Login() {
               }}
               className="text-sm text-blue-600 hover:text-blue-700 font-semibold transition"
             >
-              {isLogin ? 'ليس لديك حساب؟ قم بإنشاء حساب كـ موظف' : 'لديك حساب بالفعل؟ قم بتسجيل الدخول'}
+              {isLogin ? 'ليس لديك حساب؟ سجل شركتك الآن' : 'لديك حساب بالفعل؟ قم بتسجيل الدخول'}
             </button>
           </div>
         </div>

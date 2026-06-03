@@ -32,6 +32,7 @@ export function useTasks(employeeId?: string) {
       updatedAt: d.updated_at,
       employeeId: d.employee_id,
       createdBy: d.created_by,
+      companyId: d.company_id,
       latitude: d.latitude,
       longitude: d.longitude,
       locationVerifiedAt: d.location_verified_at

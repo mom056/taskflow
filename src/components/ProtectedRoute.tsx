@@ -7,7 +7,7 @@ export default function ProtectedRoute({
   allowedRole 
 }: { 
   children: React.ReactNode; 
-  allowedRole?: 'manager' | 'employee' 
+  allowedRole?: 'manager' | 'employee' | 'super_admin' 
 }) {
   const { user, userRole, loading } = useAuth();
   const [loadingTime, setLoadingTime] = useState(0);
@@ -42,6 +42,7 @@ export default function ProtectedRoute({
 
   if (allowedRole && userRole && userRole !== allowedRole) {
     // Redirect to their appropriate dashboard if they have the wrong role
+    if (userRole === 'super_admin') return <Navigate to="/super-admin" replace />;
     return <Navigate to={userRole === 'manager' ? '/manager' : '/employee'} replace />;
   }
   

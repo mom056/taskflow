@@ -12,12 +12,13 @@ export function useVisits() {
     if (error) throw error;
     
     return data.map(d => ({
-      id: d.id,
-      location: d.location,
-      notes: d.notes,
-      employeeId: d.employee_id,
-      createdAt: d.created_at
-    })) as Visit[];
+       id: d.id,
+       location: d.location,
+       notes: d.notes,
+       employeeId: d.employee_id,
+       companyId: d.company_id,
+       createdAt: d.created_at
+     })) as Visit[];
   };
 
   const visitsQuery = useQuery({

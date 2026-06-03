@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import ManagerDashboard from './pages/ManagerDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import ProfileSettings from './pages/ProfileSettings';
 import { Toaster } from 'react-hot-toast';
@@ -25,6 +26,12 @@ function App() {
             <Route path="/employee/*" element={
               <ProtectedRoute allowedRole="employee">
                 <EmployeeDashboard />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/super-admin/*" element={
+              <ProtectedRoute allowedRole="super_admin">
+                <SuperAdminDashboard />
               </ProtectedRoute>
             } />
 
@@ -97,6 +104,9 @@ function RootRedirect() {
     );
   }
 
+  if (userRole === 'super_admin') {
+    return <Navigate to="/super-admin" replace />;
+  }
   return <Navigate to={userRole === 'manager' ? '/manager' : '/employee'} replace />;
 }
 

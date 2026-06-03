@@ -13,7 +13,7 @@ import { useGeoLocation } from '../hooks/useGeoLocation';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function EmployeeDashboard() {
-  const { signOut, user, profile } = useAuth();
+  const { signOut, user, profile, company } = useAuth();
   const queryClient = useQueryClient();
   const { tasks, isLoading, isError } = useTasks(user?.id);
   const { uploadImage, isUploading, progress, statusText } = useImageUpload();
@@ -61,6 +61,7 @@ export default function EmployeeDashboard() {
         status: 'new',
         employee_id: user.id,
         created_by: user.id,
+        company_id: profile?.company_id,
         due_date: due,
         created_at: Date.now(),
         updated_at: Date.now(),
@@ -249,7 +250,14 @@ export default function EmployeeDashboard() {
 
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className="w-[240px] bg-white border-l border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex">
-        <div className="text-2xl font-bold text-blue-600 mb-10">TaskFlow</div>
+        <div className="mb-10">
+          <div className="text-2xl font-bold text-blue-600">TaskFlow</div>
+          {company && (
+            <div className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>{company.name}</span>
+            </div>
+          )}
+        </div>
         <nav className="flex flex-col flex-1 gap-1">
           {([
             { id: 'active', icon: ClipboardList, label: 'مهامي النشطة' },
@@ -305,7 +313,9 @@ export default function EmployeeDashboard() {
                   </span>
                 )}
               </div>
-              <div className="text-[10px] text-slate-400">{profile?.name || user?.email?.split('@')[0]}</div>
+              <div className="text-[10px] text-slate-400">
+                {profile?.name || user?.email?.split('@')[0]} {company ? `| ${company.name}` : ''}
+              </div>
             </div>
           </Link>
           <button onClick={signOut} className="p-2 hover:bg-slate-100 rounded-full"><LogOut className="w-4 h-4 text-slate-500" /></button>
@@ -316,7 +326,7 @@ export default function EmployeeDashboard() {
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900 m-0">{activeTab === 'active' ? 'مهامي النشطة' : 'المهام المنجزة'}</h1>
-              <p className="text-slate-400 text-sm mt-0.5 m-0">تسجيل المهام الميدانية وتحديث حالتها</p>
+              <p className="text-slate-400 text-sm mt-0.5 m-0">تسجيل المهام الميدانية وتحديث حالتها لـ {company?.name || 'المؤسسة'}</p>
             </div>
             {!isOnline ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 px-3 py-1 rounded-xl animate-pulse">

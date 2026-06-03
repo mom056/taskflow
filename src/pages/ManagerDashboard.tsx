@@ -23,7 +23,7 @@ import TaskStatusDonut from '../components/charts/TaskStatusDonut';
 import { useReportExport } from '../hooks/useReportExport';
 
 export default function ManagerDashboard() {
-  const { signOut, user, profile } = useAuth();
+  const { signOut, user, profile, company } = useAuth();
 
   const queryClient = useQueryClient();
   const { tasks, isLoading: tasksLoading, isError: tasksErrorObj, error: tasksError } = useTasks();
@@ -228,7 +228,15 @@ export default function ManagerDashboard() {
 
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className="w-[240px] bg-white border-l border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex">
-        <div className="text-2xl font-bold text-blue-600 mb-10">TaskFlow</div>
+        <div className="mb-10">
+          <div className="text-2xl font-bold text-blue-600">TaskFlow</div>
+          {company && (
+            <div className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>{company.name}</span>
+              <span className="bg-blue-100 text-blue-800 text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase">{company.plan}</span>
+            </div>
+          )}
+        </div>
 
         <nav className="flex flex-col flex-1 gap-1">
           {(['overview', 'tasks', 'visits', 'employees', 'analytics'] as const).map(tab => {
@@ -294,7 +302,9 @@ export default function ManagerDashboard() {
             </div>
             <div>
               <div className="text-sm font-bold text-slate-900">{tabTitle[activeTab]}</div>
-              <div className="text-[10px] text-slate-400">{profile?.name || user?.email?.split('@')[0]}</div>
+              <div className="text-[10px] text-slate-400">
+                {profile?.name || user?.email?.split('@')[0]} {company ? `| ${company.name}` : ''}
+              </div>
             </div>
           </Link>
           <button onClick={signOut} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
@@ -306,7 +316,7 @@ export default function ManagerDashboard() {
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-4 items-center justify-between shrink-0">
           <div>
             <h1 className="text-xl font-bold text-slate-900 m-0">{tabTitle[activeTab]}</h1>
-            <p className="text-slate-400 text-sm mt-0.5 m-0">متابعة سير العمل والمهام</p>
+            <p className="text-slate-400 text-sm mt-0.5 m-0">متابعة سير العمل والمهام لـ {company?.name || 'المؤسسة'}</p>
           </div>
           <div className="flex items-center gap-3">
             {(activeTab === 'overview' || activeTab === 'tasks') && (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
@@ -16,6 +17,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export function usePushNotifications(userId?: string) {
+  const { profile } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof window !== 'undefined' ? Notification.permission : 'default'
   );
@@ -87,6 +89,7 @@ export function usePushNotifications(userId?: string) {
           endpoint,
           p256dh,
           auth,
+          company_id: profile?.company_id,
           created_at: Date.now(),
         }
       ], { onConflict: 'endpoint' });
@@ -101,7 +104,7 @@ export function usePushNotifications(userId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, profile?.company_id]);
 
   return {
     permission,

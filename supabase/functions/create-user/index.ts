@@ -45,13 +45,21 @@ serve(async (req) => {
     // 2. Query caller's profile to confirm they are indeed a Manager
     const { data: callerProfile, error: profileError } = await supabaseAdmin
       .from('users')
-      .select('role')
+      .select('role, company_id')
       .eq('id', callerUser.id)
       .single();
 
     if (profileError || !callerProfile || callerProfile.role !== 'manager') {
       return new Response(JSON.stringify({ error: 'Only managers can register new users' }), {
         status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const companyId = callerProfile.company_id;
+    if (!companyId) {
+      return new Response(JSON.stringify({ error: 'Manager is not assigned to a company' }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -67,6 +75,44 @@ serve(async (req) => {
 
     if (role !== 'employee' && role !== 'manager') {
       return new Response(JSON.stringify({ error: 'Invalid user role' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Fetch company info to check employee limit
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('plan, max_employees')
+      .eq('id', companyId)
+      .single();
+
+    if (companyError || !company) {
+      return new Response(JSON.stringify({ error: 'Failed to retrieve company subscription details' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Count current employees in this company
+    const { count: currentEmployeeCount, error: countError } = await supabaseAdmin
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('role', 'employee');
+
+    if (countError) {
+      return new Response(JSON.stringify({ error: 'Failed to count company employees' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Only enforce limits on 'employee' roles
+    if (role === 'employee' && (currentEmployeeCount ?? 0) >= company.max_employees) {
+      return new Response(JSON.stringify({ 
+        error: `لقد تجاوزت الحد الأقصى للموظفين المسموح به لباقة اشتراكك (${company.max_employees} موظفين). يرجى الترقية لإضافة المزيد.` 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -96,6 +142,7 @@ serve(async (req) => {
         name,
         email,
         role,
+        company_id: companyId,
         created_at: Date.now()
       });
 

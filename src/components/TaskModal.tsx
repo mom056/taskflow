@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Task, TaskStatus, User } from '../types';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 interface TaskModalProps {
@@ -13,6 +14,7 @@ interface TaskModalProps {
 }
 
 export default function TaskModal({ isOpen, onClose, task, employees, currentUserId }: TaskModalProps) {
+  const { profile } = useAuth();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -85,6 +87,7 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
             location: formData.location,
             due_date: dueDateTimestamp,
             created_by: currentUserId,
+            company_id: profile?.company_id,
             created_at: Date.now(),
             updated_at: Date.now()
           }]);

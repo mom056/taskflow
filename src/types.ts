@@ -4,9 +4,21 @@ export interface User {
   id: string; // from auth
   name: string;
   email: string;
-  role: 'manager' | 'employee';
+  role: 'manager' | 'employee' | 'super_admin';
   createdAt: number;
   avatarUrl?: string;
+  companyId: string;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl?: string;
+  plan: 'free' | 'basic' | 'premium';
+  maxEmployees: number;
+  createdAt: number;
+  isActive: boolean;
 }
 
 export interface Task {
@@ -20,6 +32,7 @@ export interface Task {
   notes?: string;
   imageUrl?: string;
   createdBy: string;
+  companyId: string;
   createdAt: number;
   updatedAt: number;
   latitude?: number;
@@ -32,6 +45,7 @@ export interface Visit {
   location: string;
   notes?: string;
   employeeId: string;
+  companyId: string;
   createdAt: number;
 }
 
