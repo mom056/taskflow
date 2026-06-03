@@ -62,7 +62,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
   let companyId = '';
   let companyData: Company | null = null;
 
-  if (count === 0 || count === null) {
+  if (count === 0) {
     // 1st user is platform super_admin
     newRole = 'super_admin';
   } else if (companyName) {
