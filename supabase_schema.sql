@@ -128,7 +128,7 @@ CREATE POLICY "companies_delete_policy" ON public.companies
 DROP POLICY IF EXISTS "Users can read all users" ON public.users;
 DROP POLICY IF EXISTS "users_select_policy" ON public.users;
 CREATE POLICY "users_select_policy" ON public.users 
-  FOR SELECT USING (company_id = get_my_company_id() OR is_super_admin());
+  FOR SELECT USING (auth.uid() = id OR company_id = get_my_company_id() OR is_super_admin());
 
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.users;
 DROP POLICY IF EXISTS "users_update_policy" ON public.users;
