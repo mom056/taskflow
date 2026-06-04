@@ -29,12 +29,9 @@ serve(async (req) => {
       });
     }
 
-    // Initialize client with caller token to check their identity
-    const userClient = createClient(SUPABASE_URL, authHeader.replace('Bearer ', ''), {
-      auth: { persistSession: false }
-    });
-
-    const { data: { user: callerUser }, error: callerError } = await userClient.auth.getUser();
+    // Verify the caller's identity using their JWT token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: callerUser }, error: callerError } = await supabaseAdmin.auth.getUser(token);
     if (callerError || !callerUser) {
       return new Response(JSON.stringify({ error: 'Unauthorized user token' }), {
         status: 401,
