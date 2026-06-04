@@ -147,6 +147,10 @@ DROP POLICY IF EXISTS "users_insert_policy" ON public.users;
 CREATE POLICY "users_insert_policy" ON public.users 
   FOR INSERT WITH CHECK (auth.uid() = id OR is_super_admin());
 
+DROP POLICY IF EXISTS "users_delete_policy" ON public.users;
+CREATE POLICY "users_delete_policy" ON public.users 
+  FOR DELETE USING (is_super_admin());
+
 -- ── TASKS POLICIES ────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Managers can read all tasks, employees can read their own" ON public.tasks;

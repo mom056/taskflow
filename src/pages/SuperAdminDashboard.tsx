@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Building, Users, ClipboardList, Shield, LogOut, 
-  Search, Plus, CheckCircle, RefreshCcw, Save, X, Edit, CreditCard
+  Search, Plus, CheckCircle, RefreshCcw, Save, X, Edit, CreditCard, Trash2, AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -30,6 +30,17 @@ export default function SuperAdminDashboard() {
   const [editPlan, setEditPlan] = useState<'free' | 'basic' | 'premium'>('free');
   const [editMaxEmployees, setEditMaxEmployees] = useState(5);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Add company modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCompName, setNewCompName] = useState('');
+  const [newCompPlan, setNewCompPlan] = useState<'free' | 'basic' | 'premium'>('free');
+  const [newCompMaxEmp, setNewCompMaxEmp] = useState(5);
+  const [isAdding, setIsAdding] = useState(false);
+
+  // Delete confirmation state
+  const [deletingCompany, setDeletingCompany] = useState<CompanyAdminView | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Stats
   const stats = useMemo(() => {
@@ -133,6 +144,69 @@ export default function SuperAdminDashboard() {
     );
     return matchName || matchManager;
   });
+
+  const handleAddCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCompName.trim()) return;
+
+    setIsAdding(true);
+    try {
+      const slug = newCompName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\u0600-\u06FF-]/g, '');
+      const { error } = await supabase
+        .from('companies')
+        .insert([{
+          name: newCompName.trim(),
+          slug: slug || 'company-' + Date.now(),
+          plan: newCompPlan,
+          max_employees: newCompMaxEmp,
+          created_at: Date.now()
+        }]);
+
+      if (error) throw error;
+
+      toast.success(`تم إنشاء شركة "${newCompName.trim()}" بنجاح`);
+      setShowAddModal(false);
+      setNewCompName('');
+      setNewCompPlan('free');
+      setNewCompMaxEmp(5);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'تعذر إنشاء الشركة');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleDeleteCompany = async () => {
+    if (!deletingCompany) return;
+
+    setIsDeleting(true);
+    try {
+      // Delete all users belonging to this company first
+      const { error: usersError } = await supabase
+        .from('users')
+        .delete()
+        .eq('company_id', deletingCompany.id);
+
+      if (usersError) throw usersError;
+
+      // Then delete the company
+      const { error: compError } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', deletingCompany.id);
+
+      if (compError) throw compError;
+
+      toast.success(`تم حذف شركة "${deletingCompany.name}" وجميع موظفيها بنجاح`);
+      setDeletingCompany(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'تعذر حذف الشركة');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 font-sans overflow-hidden text-slate-900" dir="rtl">
@@ -243,7 +317,15 @@ export default function SuperAdminDashboard() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 items-center justify-between">
               <h3 className="font-bold text-slate-900 text-base m-0">قائمة الشركات والعملاء</h3>
-              <div className="relative w-full sm:w-72">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition border-none cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  إضافة شركة
+                </button>
+                <div className="relative flex-1 sm:w-72">
                 <input 
                   type="text" 
                   value={searchQuery}
@@ -252,6 +334,7 @@ export default function SuperAdminDashboard() {
                   className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
                 />
                 <Search className="absolute right-3 top-3 w-4 h-4 text-slate-400" />
+                </div>
               </div>
             </div>
 
@@ -287,12 +370,22 @@ export default function SuperAdminDashboard() {
                         <td className="p-4 text-center font-semibold text-slate-700">{c.employeeCount} موظف</td>
                         <td className="p-4 text-center font-bold text-blue-600">{c.maxEmployees}</td>
                         <td className="p-4 text-center">
-                          <button
-                            onClick={() => handleOpenEdit(c)}
-                            className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(c)}
+                              className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                              title="تعديل"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingCompany(c)}
+                              className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                              title="حذف"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -378,6 +471,114 @@ export default function SuperAdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD COMPANY MODAL ── */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-900 text-base m-0">إضافة شركة جديدة</h3>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-full hover:bg-slate-200 border-none bg-transparent cursor-pointer"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddCompany}>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">اسم الشركة</label>
+                  <input 
+                    type="text" 
+                    value={newCompName}
+                    onChange={e => setNewCompName(e.target.value)}
+                    required
+                    placeholder="شركة التقنية الحديثة"
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">باقة الخدمة</label>
+                  <select 
+                    value={newCompPlan}
+                    onChange={e => setNewCompPlan(e.target.value as any)}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  >
+                    <option value="free">Free Plan — مجانية</option>
+                    <option value="basic">Basic Plan — أساسية</option>
+                    <option value="premium">Premium Plan — متقدمة</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">الحد الأقصى للموظفين</label>
+                  <input 
+                    type="number" 
+                    min={1}
+                    value={newCompMaxEmp}
+                    onChange={e => setNewCompMaxEmp(Number(e.target.value))}
+                    required
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button 
+                  type="submit" 
+                  disabled={isAdding}
+                  className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 text-sm border-none cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isAdding ? 'جاري الإنشاء...' : <><Plus className="w-4 h-4" /> إنشاء الشركة</>}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddModal(false)}
+                  className="px-5 bg-white border border-slate-200 text-slate-600 font-semibold py-3 rounded-xl hover:bg-slate-50 transition text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {deletingCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto w-14 h-14 bg-red-50 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-7 h-7 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg m-0">تأكيد حذف الشركة</h3>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  سيتم حذف شركة <strong className="text-red-600">"{deletingCompany.name}"</strong> نهائياً مع جميع موظفيها ({deletingCompany.employeeCount} موظف) ومديريها ({deletingCompany.managers.length} مدير).
+                </p>
+                <p className="text-xs text-red-500 font-bold mt-2">⚠️ هذا الإجراء لا يمكن التراجع عنه</p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button 
+                onClick={handleDeleteCompany}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition disabled:opacity-50 text-sm border-none cursor-pointer"
+              >
+                {isDeleting ? 'جاري الحذف...' : 'نعم، احذف الشركة'}
+              </button>
+              <button 
+                onClick={() => setDeletingCompany(null)}
+                className="px-5 bg-white border border-slate-200 text-slate-600 font-semibold py-3 rounded-xl hover:bg-slate-50 transition text-sm cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
           </div>
         </div>
       )}

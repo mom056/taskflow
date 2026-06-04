@@ -167,29 +167,21 @@ export default function ProfileSettings() {
 
     setRegistering(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`;
-      
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
           name: newEmpName,
           email: newEmpEmail,
           password: newEmpPassword,
           role: newEmpRole
-        })
+        }
       });
 
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'فشل تسجيل العضو الجديد');
+      if (error) {
+        throw new Error(error.message || 'فشل تسجيل العضو الجديد');
+      }
+      
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       toast.success(`تم تسجيل ${newEmpRole === 'manager' ? 'مدير' : 'موظف'} جديد بنجاح: ${newEmpName}`);
