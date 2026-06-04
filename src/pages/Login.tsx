@@ -2,12 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Target, Lock } from 'lucide-react';
+import { Mail, Lock, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -34,8 +34,7 @@ export default function Login() {
     setLoading(true);
     
     try {
-      const trimmedUsername = username.trim();
-      const loginEmail = trimmedUsername.includes('@') ? trimmedUsername : `${trimmedUsername.toLowerCase().replace(/\s+/g, '_')}@taskflow.local`;
+      const loginEmail = email.trim();
       
       if (isLogin) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -54,7 +53,7 @@ export default function Login() {
           password: password,
           options: {
             data: {
-              name: name || trimmedUsername,
+              name: name || loginEmail.split('@')[0],
               company_name: companyName.trim()
             }
           }
@@ -63,7 +62,7 @@ export default function Login() {
         if (signUpError) {
           if (signUpError.message === 'User already registered') {
              setIsLogin(true);
-             throw new Error('اسم المستخدم مسجل بالفعل. لقد قمنا بتحويلك لصفحة تسجيل الدخول، يرجى المحاولة الآن.');
+             throw new Error('البريد الإلكتروني مسجل بالفعل. لقد قمنا بتحويلك لصفحة تسجيل الدخول، يرجى المحاولة الآن.');
           }
           throw signUpError;
         }
@@ -84,13 +83,13 @@ export default function Login() {
       console.error(err);
       if (err.message) {
           if (err.message === 'User already registered') {
-            toast.error('اسم المستخدم مسجل بالفعل. يرجى تسجيل الدخول.');
+            toast.error('البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.');
           } else if (err.message === 'Email not confirmed') {
-            toast.error('اسم المستخدم غير مؤكد. يرجى تعطيل "Confirm Email" في إعدادات Supabase.');
+            toast.error('البريد الإلكتروني غير مؤكد. يرجى تأكيد بريدك الإلكتروني أولاً.');
           } else if (err.message.includes('relation "public.users" does not exist') || err.message.includes('relation "users" does not exist')) {
             toast.error('خطأ: جداول قاعدة البيانات غير موجودة. يرجى تنفيذ أوامر SQL الموجودة في ملف supabase_schema.sql في Supabase SQL Editor.', { duration: 5000 });
           } else {
-            toast.error(err.message === 'Invalid login credentials' ? 'اسم المستخدم أو كلمة المرور غير صحيحة.' : err.message);
+            toast.error(err.message === 'Invalid login credentials' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.' : err.message);
           }
       } else {
         toast.error('حدث خطأ أثناء المصادقة');
@@ -153,18 +152,18 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">اسم المستخدم</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">البريد الإلكتروني</label>
               <div className="relative">
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-3 pr-10 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition"
-                  placeholder="ahmed123"
+                  placeholder="ahmed@example.com"
                   required
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <Target className="h-4 w-4 text-slate-400" />
+                  <Mail className="h-4 w-4 text-slate-400" />
                 </div>
               </div>
             </div>
