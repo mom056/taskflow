@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Task } from '../types';
+import { openExternalUrl } from '../lib/nativeServices';
 
 interface TaskMapProps {
   tasks: Task[];
@@ -9,6 +10,7 @@ interface TaskMapProps {
 declare global {
   interface Window {
     L: any;
+    openExternalUrl: (url: string) => void;
   }
 }
 
@@ -95,39 +97,40 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
       const statusAr = task.status === 'completed' ? 'مكتملة' : 'جاري العمل';
       const statusColor = task.status === 'completed' ? '#10b981' : '#f59e0b';
 
-      // Define custom popup HTML with styling, Arabic texts, thumbnail and Google Maps Link
-      const popupHtml = `
-        <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
-          <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: bold; color: #1e293b;">${task.title}</h4>
-          <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">الموظف: <b>${empName}</b></p>
-          
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-            <span style="display: inline-block; width: 8px; height: 8px; background-color: ${statusColor}; border-radius: 50%;"></span>
-            <span style="font-size: 11px; font-weight: bold; color: ${statusColor};">${statusAr}</span>
-          </div>
+          window.openExternalUrl = openExternalUrl;
 
-          ${task.imageUrl ? `
-            <div style="margin-bottom: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
-              <img src="${task.imageUrl}" style="width: 100%; height: 80px; object-cover: cover; display: block;" />
+          const popupHtml = `
+            <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: bold; color: #1e293b;">${task.title}</h4>
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">الموظف: <b>${empName}</b></p>
+              
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                <span style="display: inline-block; width: 8px; height: 8px; background-color: ${statusColor}; border-radius: 50%;"></span>
+                <span style="font-size: 11px; font-weight: bold; color: ${statusColor};">${statusAr}</span>
+              </div>
+
+              ${task.imageUrl ? `
+                <div style="margin-bottom: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+                  <img src="${task.imageUrl}" style="width: 100%; height: 80px; object-cover: cover; display: block;" />
+                </div>
+              ` : ''}
+
+              ${task.notes ? `
+                <p style="margin: 0 0 8px 0; font-size: 11px; color: #475569; background: #f8fafc; padding: 6px; border-radius: 6px; border: 1px solid #f1f5f9;">
+                  ${task.notes}
+                </p>
+              ` : ''}
+
+              <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${lat},${lng}'); return false;" 
+                 style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
+                فتح في خرائط Google ↗
+              </a>
             </div>
-          ` : ''}
+          `;
 
-          ${task.notes ? `
-            <p style="margin: 0 0 8px 0; font-size: 11px; color: #475569; background: #f8fafc; padding: 6px; border-radius: 6px; border: 1px solid #f1f5f9;">
-              ${task.notes}
-            </p>
-          ` : ''}
-
-          <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lng}" target="_blank" rel="noopener noreferrer" 
-             style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
-            فتح في خرائط Google ↗
-          </a>
-        </div>
-      `;
-
-      const marker = window.L.marker([lat, lng])
-        .addTo(mapRef.current)
-        .bindPopup(popupHtml);
+          const marker = window.L.marker([lat, lng])
+            .addTo(mapRef.current)
+            .bindPopup(popupHtml);
 
       markersRef.current.push(marker);
     });

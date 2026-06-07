@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import ManagerDashboard from './pages/ManagerDashboard';
@@ -7,10 +8,64 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import ProfileSettings from './pages/ProfileSettings';
 import { Toaster } from 'react-hot-toast';
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from './lib/supabase';
+
+const Router = Capacitor.isNativePlatform() ? HashRouter : BrowserRouter;
+
+function CapacitorHandlers() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let activeListener: any = null;
+    let backListener: any = null;
+
+    async function setupNativeHandlers() {
+      const { App: CapApp } = await import('@capacitor/app');
+
+      // 1. App State Change Listener (Resume)
+      activeListener = await CapApp.addListener('appStateChange', (state) => {
+        if (state.isActive) {
+          console.log('[AppState] App resumed, invalidating query cache and reconnecting supabase...');
+          queryClient.invalidateQueries();
+          supabase.realtime.connect();
+        }
+      });
+
+      // 2. Hardware Back Button Listener (Android)
+      backListener = await CapApp.addListener('backButton', () => {
+        // Root pages where pressing back closes the app
+        const rootPaths = ['/login', '/manager', '/employee', '/super-admin', '/'];
+        const isRootPath = rootPaths.includes(location.pathname);
+
+        if (isRootPath) {
+          CapApp.exitApp();
+        } else {
+          navigate(-1);
+        }
+      });
+    }
+
+    setupNativeHandlers();
+
+    return () => {
+      if (activeListener) activeListener.remove();
+      if (backListener) backListener.remove();
+    };
+  }, [queryClient, navigate, location.pathname]);
+
+  return null;
+}
 
 function App() {
   return (
     <Router>
+      <CapacitorHandlers />
       <AuthProvider>
         <div className="min-h-screen bg-slate-50 font-sans" dir="rtl">
           <Toaster position="top-center" toastOptions={{ style: { fontFamily: 'inherit' } }} />
@@ -52,6 +107,7 @@ function App() {
 
 function RootRedirect() {
   const { user, userRole, loading, signOut } = useAuth();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -92,7 +148,7 @@ function RootRedirect() {
             <button
               onClick={async () => {
                 await signOut();
-                window.location.href = '/login';
+                navigate('/login');
               }}
               className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-200 transition-colors"
             >

@@ -69,13 +69,14 @@ CREATE TABLE IF NOT EXISTS public.visits (
   created_at BIGINT NOT NULL
 );
 
--- 5. Push Subscriptions Table (Modified to include company_id)
+-- 5. Push Subscriptions Table (Modified to include company_id and device_token)
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-  endpoint TEXT UNIQUE NOT NULL,
-  p256dh TEXT NOT NULL,
-  auth TEXT NOT NULL,
+  endpoint TEXT UNIQUE, -- Nullable for native mobile devices
+  p256dh TEXT,          -- Nullable for native mobile devices
+  auth TEXT,            -- Nullable for native mobile devices
+  device_token TEXT UNIQUE, -- Native push notification token (nullable for web)
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
   created_at BIGINT NOT NULL
 );
@@ -345,3 +346,11 @@ DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
 CREATE POLICY "Anyone can view avatars"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'avatars');
+
+-- ── MIGRATIONS & ALTERATIONS ────────────────────────────────────
+
+-- Migration: Add native device_token column to push_subscriptions and make web subscription columns nullable
+ALTER TABLE public.push_subscriptions ALTER COLUMN endpoint DROP NOT NULL;
+ALTER TABLE public.push_subscriptions ALTER COLUMN p256dh DROP NOT NULL;
+ALTER TABLE public.push_subscriptions ALTER COLUMN auth DROP NOT NULL;
+ALTER TABLE public.push_subscriptions ADD COLUMN IF NOT EXISTS device_token TEXT UNIQUE;

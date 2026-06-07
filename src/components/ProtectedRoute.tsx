@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect } from 'react';
 
@@ -10,6 +10,7 @@ export default function ProtectedRoute({
   allowedRole?: 'manager' | 'employee' | 'super_admin' 
 }) {
   const { user, userRole, loading } = useAuth();
+  const navigate = useNavigate();
   const [loadingTime, setLoadingTime] = useState(0);
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function ProtectedRoute({
         <h2 className="text-xl font-bold mb-2">حسابك قيد المراجعة</h2>
         <p className="mb-4">لم يتم تعيين دور لك في النظام بعد. يرجى التواصل مع المدير.</p>
         <button 
-          onClick={() => window.location.href = '/login'} 
+          onClick={() => navigate('/login')} 
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >
           العودة لتسجيل الدخول

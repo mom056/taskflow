@@ -4,11 +4,14 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const isNative = process.env.VITE_PLATFORM === 'native';
+
 export default defineConfig({
+  base: isNative ? './' : '/',
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    !isNative && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
@@ -37,7 +40,7 @@ export default defineConfig({
         importScripts: ['/push-worker.js']
       }
     })
-  ],
+  ].filter(Boolean),
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import { Preferences } from '@capacitor/preferences';
+import { Network } from '@capacitor/network';
+import { Capacitor } from '@capacitor/core';
 
 export interface QueueItem {
   id: string;
@@ -12,36 +15,42 @@ export interface QueueItem {
 const STORAGE_KEY = 'taskflow_offline_queue';
 
 export function useOfflineQueue(onSyncSuccess?: () => void) {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [queue, setQueue] = useState<QueueItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [isOnline, setIsOnline] = useState(true);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
 
-  // Track online/offline status
+  // Load queue from storage on init
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
-      syncQueue();
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-      toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
-    };
+    async function loadQueue() {
+      if (Capacitor.isNativePlatform()) {
+        const { value } = await Preferences.get({ key: STORAGE_KEY });
+        setQueue(value ? JSON.parse(value) : []);
+      } else {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        setQueue(saved ? JSON.parse(saved) : []);
+      }
+    }
+    loadQueue();
+  }, []);
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [queue]);
+  // Sync helper
+  const saveQueue = async (updatedQueue: QueueItem[]) => {
+    setQueue(updatedQueue);
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.set({ key: STORAGE_KEY, value: JSON.stringify(updatedQueue) });
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedQueue));
+    }
+  };
 
   // Sync queue with server
   const syncQueue = useCallback(async () => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    let saved: string | null = null;
+    if (Capacitor.isNativePlatform()) {
+      const res = await Preferences.get({ key: STORAGE_KEY });
+      saved = res.value;
+    } else {
+      saved = localStorage.getItem(STORAGE_KEY);
+    }
     const items: QueueItem[] = saved ? JSON.parse(saved) : [];
     if (items.length === 0) return;
 
@@ -109,14 +118,12 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
         successCount++;
       } catch (err: any) {
         console.error(`[OfflineQueue] Sync failed for item ${item.id}:`, err);
-        // Keep it in the queue to try again later
         remainingItems.push(item);
       }
     }
 
     // Update state and storage
-    setQueue(remainingItems);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(remainingItems));
+    await saveQueue(remainingItems);
 
     if (successCount > 0) {
       toast.success(`تمت مزامنة ${successCount} من التعديلات بنجاح ✓`);
@@ -126,14 +133,77 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
     }
   }, [onSyncSuccess]);
 
-  // Try to sync on mount if online
+  // Track online/offline status using @capacitor/network
+  useEffect(() => {
+    let networkListener: any = null;
+    let isMounted = true;
+
+    async function initNetwork() {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const status = await Network.getStatus();
+          if (isMounted) setIsOnline(status.connected);
+
+          networkListener = await Network.addListener('networkStatusChange', (status) => {
+            if (!isMounted) return;
+            setIsOnline(status.connected);
+            if (status.connected) {
+              toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
+              syncQueue();
+            } else {
+              toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
+            }
+          });
+        } catch (e) {
+          console.warn('[OfflineQueue] Native network plugin failed, using fallback', e);
+        }
+      }
+
+      // Fallback for Web browser
+      const handleOnline = () => {
+        if (isMounted) {
+          setIsOnline(true);
+          toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
+          syncQueue();
+        }
+      };
+      const handleOffline = () => {
+        if (isMounted) {
+          setIsOnline(false);
+          toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
+        }
+      };
+
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+
+    const cleanupsPromise = initNetwork();
+
+    return () => {
+      isMounted = false;
+      cleanupsPromise.then((webCleanup) => {
+        if (webCleanup) webCleanup();
+      });
+      if (networkListener) {
+        networkListener.remove();
+      }
+    };
+  }, [syncQueue]);
+
+  // Try to sync on mount/network change if online
   useEffect(() => {
     if (isOnline && queue.length > 0) {
       syncQueue();
     }
-  }, [isOnline]);
+  }, [isOnline, queue.length, syncQueue]);
 
-  const addToQueue = useCallback((type: QueueItem['type'], payload: any, taskId?: string) => {
+  const addToQueue = useCallback(async (type: QueueItem['type'], payload: any, taskId?: string) => {
     const newItem: QueueItem = {
       id: Math.random().toString(36).substring(2, 9),
       type,
@@ -141,16 +211,19 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
       payload
     };
 
-    const updatedQueue = [...queue, newItem];
-    setQueue(updatedQueue);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedQueue));
+    setQueue((prevQueue) => {
+      const updatedQueue = [...prevQueue, newItem];
+      saveQueue(updatedQueue);
+      return updatedQueue;
+    });
     
     // Notify user of local save
     toast.success('تم الحفظ محلياً مؤقتاً في انتظار الشبكة');
-  }, [queue]);
+  }, []);
 
   return {
     isOnline,
+    queue,
     queueLength: queue.length,
     addToQueue,
     syncQueue

@@ -198,7 +198,7 @@ export default function ProfileSettings() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-16" dir="rtl">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-20 shadow-xs">
+      <header className="bg-white border-b border-slate-100 px-6 pb-4 safe-pt flex items-center gap-4 sticky top-0 z-20 shadow-xs">
         <button 
           onClick={() => {
             if (profile?.role === 'super_admin') {

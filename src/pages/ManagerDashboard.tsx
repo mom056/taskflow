@@ -7,6 +7,7 @@ import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft, Ma
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskMap from '../components/TaskMap';
+import { openExternalUrl } from '../lib/nativeServices';
 
 import { useTasks } from '../hooks/useTasks';
 import { useUsers } from '../hooks/useUsers';
@@ -291,7 +292,7 @@ export default function ManagerDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
 
         {/* ── MOBILE HEADER ── */}
-        <header className="md:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <header className="md:hidden bg-white border-b border-slate-100 px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-sm">
           <Link to="/profile" className="flex items-center gap-3 text-slate-800 decoration-none no-underline">
             <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100">
               {profile?.avatar_url ? (
@@ -587,7 +588,11 @@ export default function ManagerDashboard() {
                             <p className="text-xs text-slate-500 bg-white rounded-lg px-3 py-2 border border-slate-100">{task.notes}</p>
                           )}
                           {task.imageUrl && (
-                            <a href={task.imageUrl} target="_blank" rel="noopener noreferrer"
+                            <a href={task.imageUrl}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openExternalUrl(task.imageUrl!);
+                              }}
                               className="block overflow-hidden rounded-lg border border-slate-200 max-w-[200px]">
                               <img src={task.imageUrl} alt="صورة الزيارة" className="w-full h-24 object-cover hover:scale-105 transition-transform" />
                             </a>

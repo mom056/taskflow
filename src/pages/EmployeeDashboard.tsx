@@ -11,13 +11,15 @@ import { useImageUpload } from '../hooks/useImageUpload';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGeoLocation } from '../hooks/useGeoLocation';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { Capacitor } from '@capacitor/core';
+import { openExternalUrl, takeNativePhoto } from '../lib/nativeServices';
 
 export default function EmployeeDashboard() {
   const { signOut, user, profile, company } = useAuth();
   const queryClient = useQueryClient();
   const { tasks, isLoading, isError } = useTasks(user?.id);
   const { uploadImage, isUploading, progress, statusText } = useImageUpload();
-  const { isOnline, queueLength, addToQueue } = useOfflineQueue(() => {
+  const { isOnline, queue, queueLength, addToQueue } = useOfflineQueue(() => {
     queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
   });
   const { getCoordinates, loading: isLocating } = useGeoLocation();
@@ -196,9 +198,8 @@ export default function EmployeeDashboard() {
   const getMergedTasks = () => {
     const merged = [...tasks];
     
-    // Read from localStorage to avoid queue sync delay in state
-    const savedQueue = localStorage.getItem('taskflow_offline_queue');
-    const offlineQueue: QueueItem[] = savedQueue ? JSON.parse(savedQueue) : [];
+    // Read from hook state (no direct localStorage dependency)
+    const offlineQueue: QueueItem[] = queue;
     
     offlineQueue.forEach(item => {
       if (item.type === 'create_task') {
@@ -294,7 +295,7 @@ export default function EmployeeDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile header */}
-        <header className="md:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <header className="md:hidden bg-white border-b border-slate-100 px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-sm">
           <Link to="/profile" className="flex items-center gap-3 text-slate-800 decoration-none no-underline">
             <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100 shrink-0">
               {profile?.avatar_url ? (
@@ -437,7 +438,12 @@ export default function EmployeeDashboard() {
                           </div>
                         )}
                         {task.imageUrl && (
-                          <a href={task.imageUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl border border-slate-100 mt-2">
+                          <a href={task.imageUrl}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openExternalUrl(task.imageUrl!);
+                            }}
+                            className="block overflow-hidden rounded-xl border border-slate-100 mt-2">
                             <img src={task.imageUrl} alt="مرفق" className="w-full h-32 object-cover hover:scale-105 transition-transform duration-300" />
                           </a>
                         )}
@@ -584,20 +590,43 @@ export default function EmployeeDashboard() {
                     </button>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
-                    <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
-                    <span className="text-xs font-semibold text-slate-500">اضغط لاختيار صورة</span>
-                    <span className="text-[10px] text-slate-400 mt-1">أو التقط صورة من الكاميرا</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setImageFile(file);
-                        const reader = new FileReader();
-                        reader.onloadend = () => setImagePreview(reader.result as string);
-                        reader.readAsDataURL(file);
-                      }} />
-                  </label>
+                  <div
+                    onClick={async (e) => {
+                      if (Capacitor.isNativePlatform()) {
+                        // Prevent the click from triggering the file input click on label if any
+                        e.preventDefault();
+                        try {
+                          const file = await takeNativePhoto();
+                          if (file) {
+                            setImageFile(file);
+                            const reader = new FileReader();
+                            reader.onloadend = () => setImagePreview(reader.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'فشل تشغيل الكاميرا');
+                        }
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
+                      <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
+                      <span className="text-xs font-semibold text-slate-500">اضغط لاختيار صورة</span>
+                      <span className="text-[10px] text-slate-400 mt-1">أو التقط صورة من الكاميرا</span>
+                      {!Capacitor.isNativePlatform() && (
+                        <input type="file" accept="image/*" capture="environment" className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setImageFile(file);
+                            const reader = new FileReader();
+                            reader.onloadend = () => setImagePreview(reader.result as string);
+                            reader.readAsDataURL(file);
+                          }} />
+                      )}
+                    </label>
+                  </div>
                 )}
                 {isUploading && (
                   <div className="mt-2">
