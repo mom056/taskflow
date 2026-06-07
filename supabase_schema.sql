@@ -110,6 +110,50 @@ RETURNS INT AS $$
   SELECT COUNT(*)::INT FROM public.users;
 $$ LANGUAGE sql SECURITY DEFINER;
 
+-- ── SECURITY TRIGGERS FOR SENSITIVE COLUMNS ────────────────────
+
+-- Prevent non-super-admins from changing roles or company_ids on users table
+CREATE OR REPLACE FUNCTION public.check_user_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT public.is_super_admin() THEN
+    IF OLD.role IS DISTINCT FROM NEW.role THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل الدور الوظيفي (role) إلا من قبل المشرف العام.';
+    END IF;
+    IF OLD.company_id IS DISTINCT FROM NEW.company_id THEN
+      RAISE EXCEPTION 'غير مسموح بنقل المستخدم إلى شركة أخرى (company_id) إلا من قبل المشرف العام.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS check_user_update_trigger ON public.users;
+CREATE TRIGGER check_user_update_trigger
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.check_user_update();
+
+-- Prevent non-super-admins from changing subscription plans or employee limits on companies table
+CREATE OR REPLACE FUNCTION public.check_company_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT public.is_super_admin() THEN
+    IF OLD.plan IS DISTINCT FROM NEW.plan THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل خطة الاشتراك (plan) إلا من قبل المشرف العام.';
+    END IF;
+    IF OLD.max_employees IS DISTINCT FROM NEW.max_employees THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل الحد الأقصى للموظفين (max_employees) إلا من قبل المشرف العام.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS check_company_update_trigger ON public.companies;
+CREATE TRIGGER check_company_update_trigger
+  BEFORE UPDATE ON public.companies
+  FOR EACH ROW EXECUTE FUNCTION public.check_company_update();
+
 -- ── COMPANIES POLICIES ────────────────────────────────────────
 
 DROP POLICY IF EXISTS "companies_select_policy" ON public.companies;
@@ -122,8 +166,14 @@ CREATE POLICY "companies_insert_policy" ON public.companies
 
 DROP POLICY IF EXISTS "companies_update_policy" ON public.companies;
 CREATE POLICY "companies_update_policy" ON public.companies 
-  FOR UPDATE USING (id = get_my_company_id() OR is_super_admin())
-  WITH CHECK (id = get_my_company_id() OR is_super_admin());
+  FOR UPDATE USING (
+    is_super_admin() OR 
+    (id = get_my_company_id() AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager'))
+  )
+  WITH CHECK (
+    is_super_admin() OR 
+    (id = get_my_company_id() AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager'))
+  );
 
 DROP POLICY IF EXISTS "companies_delete_policy" ON public.companies;
 CREATE POLICY "companies_delete_policy" ON public.companies 
