@@ -183,7 +183,7 @@ export default function TaskDetailsModal({ isOpen, onClose, task, employees, onE
 
                 {/* 3. Duration */}
                 {task.startLocationVerifiedAt && task.locationVerifiedAt && (
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs bg-white rounded-lg p-2.5 border border-slate-100/50 mt-2">
+                  <div className="flex items-center justify-between text-xs bg-white rounded-lg p-2.5 border border-slate-100/50 mt-2">
                     <span className="font-semibold text-slate-500 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-blue-500" />
                       المدة المستغرقة:
