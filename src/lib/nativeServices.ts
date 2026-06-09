@@ -43,20 +43,21 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
         position = await Geolocation.getCurrentPosition({
           enableHighAccuracy: false,
           timeout: 8000,
-          maximumAge: 30000
+          maximumAge: 300000 // Allow up to 5 minutes cached
         });
       } catch (err) {
-        console.warn('[GPS] Low accuracy position failed, trying last known position...', err);
+        console.warn('[GPS] Low accuracy position failed, trying cached position fallback...', err);
         
-        // Attempt 3: Retrieve cached location from the OS (no time limits, any location is better than failing offline)
+        // Attempt 3: Retrieve cached location from the OS (accept cached locations up to 24 hours old)
         try {
-          const lastKnown = await Geolocation.getLastKnownLocation();
-          if (lastKnown) {
-            position = lastKnown;
-            console.log('[GPS] Successfully retrieved cached last known position');
-          }
+          position = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: false,
+            timeout: 3000, // Short timeout
+            maximumAge: 86400000 // 24 hours
+          });
+          console.log('[GPS] Successfully retrieved cached position fallback');
         } catch (lkErr) {
-          console.error('[GPS] Failed to retrieve last known position:', lkErr);
+          console.error('[GPS] Failed to retrieve cached position fallback:', lkErr);
         }
       }
     }
