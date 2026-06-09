@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Company } from '../types';
+import toast from 'react-hot-toast';
 
 type Role = 'manager' | 'employee' | 'super_admin' | null;
 
@@ -193,13 +194,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTimeout(async () => {
           try {
             const result = await fetchOrCreateProfile(sessionUser);
+            const companyRecord = result.company as any;
+            if (companyRecord && companyRecord.is_active === false && result.role !== 'super_admin') {
+              throw new Error('company_suspended');
+            }
             if (isMountedRef.current) {
               setProfile(result.profile);
               setUserRole(result.role);
               setCompany(result.company);
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error('[Auth] Profile fetch failed:', err);
+            if (err.message === 'company_suspended') {
+              toast.error('تم إيقاف حساب هذه المؤسسة مؤقتاً. يرجى التواصل مع الإدارة.');
+              await supabase.auth.signOut();
+            }
           } finally {
             if (isMountedRef.current) {
               setLoading(false);

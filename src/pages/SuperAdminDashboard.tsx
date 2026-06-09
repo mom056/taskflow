@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Building, Users, ClipboardList, Shield, LogOut, 
-  Search, Plus, CheckCircle, RefreshCcw, Save, X, Edit, CreditCard, Trash2, AlertTriangle
+  Search, Plus, CheckCircle, RefreshCcw, Save, X, Edit, CreditCard, Trash2, AlertTriangle,
+  TrendingUp, Power
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,6 +17,7 @@ interface CompanyAdminView {
   createdAt: number;
   managers: { name: string; email: string }[];
   employeeCount: number;
+  isActive: boolean;
 }
 
 export default function SuperAdminDashboard() {
@@ -24,6 +26,7 @@ export default function SuperAdminDashboard() {
   const [companies, setCompanies] = useState<CompanyAdminView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'premium' | 'basic' | 'free' | 'active' | 'suspended'>('all');
   
   // Edit modal state
   const [editingCompany, setEditingCompany] = useState<CompanyAdminView | null>(null);
@@ -43,6 +46,14 @@ export default function SuperAdminDashboard() {
   const [deletingCompany, setDeletingCompany] = useState<CompanyAdminView | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Utility to convert Arabic/Persian digits to English digits
+  const toEnglishDigits = (str: string) => {
+    return str
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      .replace(/[^0-9]/g, '');
+  };
+
   // Stats
   const stats = useMemo(() => {
     const total = companies.length;
@@ -50,7 +61,11 @@ export default function SuperAdminDashboard() {
     const premium = companies.filter(c => c.plan === 'premium').length;
     const free = companies.filter(c => c.plan === 'free').length;
     const totalEmployees = companies.reduce((acc, c) => acc + c.employeeCount, 0);
-    return { total, basic, premium, free, totalEmployees };
+    const estimatedMRR = companies.reduce((acc, c) => {
+      if (!c.isActive) return acc;
+      return acc + (c.plan === 'premium' ? 50 : c.plan === 'basic' ? 20 : 0);
+    }, 0);
+    return { total, basic, premium, free, totalEmployees, estimatedMRR };
   }, [companies]);
 
   const fetchData = async () => {
@@ -86,7 +101,8 @@ export default function SuperAdminDashboard() {
           maxEmployees: comp.max_employees,
           createdAt: comp.created_at,
           managers,
-          employeeCount
+          employeeCount,
+          isActive: comp.is_active !== false
         };
       });
 
@@ -108,6 +124,23 @@ export default function SuperAdminDashboard() {
     setEditName(comp.name);
     setEditPlan(comp.plan);
     setEditMaxEmployees(comp.maxEmployees);
+  };
+
+  const handleToggleActive = async (comp: CompanyAdminView) => {
+    try {
+      const nextActive = !comp.isActive;
+      const { error } = await supabase
+        .from('companies')
+        .update({ is_active: nextActive })
+        .eq('id', comp.id);
+
+      if (error) throw error;
+
+      toast.success(nextActive ? `تم تنشيط شركة "${comp.name}"` : `تم إيقاف شركة "${comp.name}" مؤقتاً`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'تعذر تعديل حالة النشاط للشركة');
+    }
   };
 
   const handleSaveCompany = async (e: React.FormEvent) => {
@@ -137,14 +170,26 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const filteredCompanies = companies.filter(c => {
-    const query = searchQuery.toLowerCase();
-    const matchName = c.name.toLowerCase().includes(query);
-    const matchManager = c.managers.some(m => 
-      m.name.toLowerCase().includes(query) || m.email.toLowerCase().includes(query)
-    );
-    return matchName || matchManager;
-  });
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(c => {
+      const query = searchQuery.toLowerCase();
+      const matchName = c.name.toLowerCase().includes(query);
+      const matchManager = c.managers.some(m => 
+        m.name.toLowerCase().includes(query) || m.email.toLowerCase().includes(query)
+      );
+      const matchesSearch = matchName || matchManager;
+
+      if (!matchesSearch) return false;
+
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'premium') return c.plan === 'premium';
+      if (statusFilter === 'basic') return c.plan === 'basic';
+      if (statusFilter === 'free') return c.plan === 'free';
+      if (statusFilter === 'active') return c.isActive;
+      if (statusFilter === 'suspended') return !c.isActive;
+      return true;
+    });
+  }, [companies, searchQuery, statusFilter]);
 
   const handleAddCompany = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,7 +344,7 @@ export default function SuperAdminDashboard() {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
               <Building className="w-6 h-6 text-blue-500 mb-2" />
               <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
@@ -313,42 +358,101 @@ export default function SuperAdminDashboard() {
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
               <CreditCard className="w-6 h-6 text-purple-500 mb-2" />
               <div className="text-2xl font-bold text-slate-900">{stats.premium}</div>
-              <div className="text-xs text-slate-400 mt-1">شركات باقة Premium</div>
+              <div className="text-xs text-slate-400 mt-1">باقات Premium</div>
             </div>
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
               <CreditCard className="w-6 h-6 text-amber-500 mb-2" />
               <div className="text-2xl font-bold text-slate-900">{stats.basic}</div>
-              <div className="text-xs text-slate-400 mt-1">شركات باقة Basic</div>
+              <div className="text-xs text-slate-400 mt-1">باقات Basic</div>
             </div>
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
               <CreditCard className="w-6 h-6 text-slate-500 mb-2" />
               <div className="text-2xl font-bold text-slate-900">{stats.free}</div>
               <div className="text-xs text-slate-400 mt-1">باقات مجانية</div>
             </div>
+            <div className="bg-linear-to-br from-blue-600 to-indigo-700 p-5 rounded-2xl text-white shadow-md col-span-2 lg:col-span-1">
+              <TrendingUp className="w-6 h-6 text-blue-200 mb-2" />
+              <div className="text-2xl font-bold">${stats.estimatedMRR}</div>
+              <div className="text-xs text-blue-100 mt-1">العوائد الشهرية المتوقعة (MRR)</div>
+            </div>
           </div>
 
           {/* Search Table Card */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-base m-0">قائمة الشركات والعملاء</h3>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition border-none cursor-pointer shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  إضافة شركة
-                </button>
-                <div className="relative flex-1 sm:w-72">
-                <input 
-                  type="text" 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="ابحث باسم الشركة أو المدير..."
-                  className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                />
-                <Search className="absolute right-3 top-3 w-4 h-4 text-slate-400" />
+            <div className="p-5 border-b border-slate-100 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-base m-0">قائمة الشركات والعملاء</h3>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition border-none cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    إضافة شركة
+                  </button>
+                  <div className="relative flex-1 sm:w-72">
+                    <input 
+                      type="text" 
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="ابحث باسم الشركة أو المدير..."
+                      className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
+                    />
+                    <Search className="absolute right-3 top-3 w-4 h-4 text-slate-400" />
+                  </div>
                 </div>
+              </div>
+
+              {/* Filters Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                <button 
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  الكل ({companies.length})
+                </button>
+                <button 
+                  onClick={() => setStatusFilter('premium')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'premium' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Premium ({companies.filter(c => c.plan === 'premium').length})
+                </button>
+                <button 
+                  onClick={() => setStatusFilter('basic')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'basic' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Basic ({companies.filter(c => c.plan === 'basic').length})
+                </button>
+                <button 
+                  onClick={() => setStatusFilter('free')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'free' ? 'bg-slate-700 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Free ({companies.filter(c => c.plan === 'free').length})
+                </button>
+                <button 
+                  onClick={() => setStatusFilter('active')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'active' ? 'bg-green-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  نشط ({companies.filter(c => c.isActive).length})
+                </button>
+                <button 
+                  onClick={() => setStatusFilter('suspended')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                    statusFilter === 'suspended' ? 'bg-red-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  موقوف ({companies.filter(c => !c.isActive).length})
+                </button>
               </div>
             </div>
 
@@ -360,49 +464,86 @@ export default function SuperAdminDashboard() {
                     <th className="p-4">المدير المسؤول</th>
                     <th className="p-4">البريد الإلكتروني</th>
                     <th className="p-4 text-center">باقة الاشتراك</th>
-                    <th className="p-4 text-center">الموظفين المضافين</th>
+                    <th className="p-4 text-center">استهلاك الموظفين</th>
                     <th className="p-4 text-center">الحد الأقصى</th>
                     <th className="p-4 text-center">التحكم</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 text-sm">
                   {filteredCompanies.length > 0 ? (
-                    filteredCompanies.map(c => (
-                      <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="p-4 font-bold text-slate-800">{c.name}</td>
-                        <td className="p-4 text-slate-600">{c.managers[0]?.name || 'غير محدد'}</td>
-                        <td className="p-4 text-slate-500 font-mono text-xs">{c.managers[0]?.email || '-'}</td>
-                        <td className="p-4 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
-                            c.plan === 'premium' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                            c.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                            'bg-slate-50 text-slate-700 border border-slate-100'
-                          }`}>
-                            {c.plan}
-                          </span>
-                        </td>
-                        <td className="p-4 text-center font-semibold text-slate-700">{c.employeeCount} موظف</td>
-                        <td className="p-4 text-center font-bold text-blue-600">{c.maxEmployees}</td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenEdit(c)}
-                              className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
-                              title="تعديل"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeletingCompany(c)}
-                              className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
-                              title="حذف"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    filteredCompanies.map(c => {
+                      const progressPercentage = Math.min((c.employeeCount / c.maxEmployees) * 100, 100);
+                      const isNearLimit = c.employeeCount >= c.maxEmployees * 0.8;
+                      const isFull = c.employeeCount >= c.maxEmployees;
+
+                      return (
+                        <tr key={c.id} className={`hover:bg-slate-50/50 transition-colors ${!c.isActive ? 'bg-red-50/20' : ''}`}>
+                          <td className="p-4 font-bold text-slate-800">
+                            <div className="flex items-center gap-2">
+                              <span>{c.name}</span>
+                              {!c.isActive && (
+                                <span className="px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded-full font-bold">موقوف</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4 text-slate-600">{c.managers[0]?.name || 'غير محدد'}</td>
+                          <td className="p-4 text-slate-500 font-mono text-xs">{c.managers[0]?.email || '-'}</td>
+                          <td className="p-4 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                              c.plan === 'premium' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                              c.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                              'bg-slate-50 text-slate-700 border border-slate-100'
+                            }`}>
+                              {c.plan}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex flex-col items-center justify-center gap-1 min-w-[120px]">
+                              <span className="font-semibold text-slate-700 text-xs">
+                                {c.employeeCount} / {c.maxEmployees} موظف
+                              </span>
+                              <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    isFull ? 'bg-red-500' : isNearLimit ? 'bg-amber-500' : 'bg-blue-600'
+                                  }`} 
+                                  style={{ width: `${progressPercentage}%` }} 
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-center font-bold text-blue-600">{c.maxEmployees}</td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleToggleActive(c)}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border-none transition-colors cursor-pointer ${
+                                  c.isActive 
+                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' 
+                                    : 'bg-green-50 hover:bg-green-100 text-green-700'
+                                }`}
+                              >
+                                {c.isActive ? 'تعطيل' : 'تنشيط'}
+                              </button>
+                              <button
+                                onClick={() => handleOpenEdit(c)}
+                                className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                                title="تعديل"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setDeletingCompany(c)}
+                                className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                                title="حذف"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan={7} className="text-center p-8 text-slate-400">
@@ -458,10 +599,11 @@ export default function SuperAdminDashboard() {
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">الحد الأقصى للموظفين المسموح بهم</label>
                   <input 
-                    type="number" 
-                    min={1}
+                    type="text" 
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={editMaxEmployees}
-                    onChange={e => setEditMaxEmployees(Number(e.target.value))}
+                    onChange={e => setEditMaxEmployees(Number(toEnglishDigits(e.target.value)) || 1)}
                     required
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
@@ -531,10 +673,11 @@ export default function SuperAdminDashboard() {
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">الحد الأقصى للموظفين</label>
                   <input 
-                    type="number" 
-                    min={1}
+                    type="text" 
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={newCompMaxEmp}
-                    onChange={e => setNewCompMaxEmp(Number(e.target.value))}
+                    onChange={e => setNewCompMaxEmp(Number(toEnglishDigits(e.target.value)) || 1)}
                     required
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />

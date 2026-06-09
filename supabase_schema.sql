@@ -91,10 +91,13 @@ ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- ── HELPER FUNCTIONS FOR MULTI-TENANCY ───────────────────────
 
--- Helper function to get current user's company_id
+-- Helper function to get current user's company_id (returns NULL if the company is suspended/inactive)
 CREATE OR REPLACE FUNCTION public.get_my_company_id()
 RETURNS UUID AS $$
-  SELECT company_id FROM public.users WHERE id = auth.uid()
+  SELECT u.company_id 
+  FROM public.users u
+  JOIN public.companies c ON c.id = u.company_id
+  WHERE u.id = auth.uid() AND c.is_active = true
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 -- Helper function to check if current user is super_admin
@@ -134,7 +137,7 @@ CREATE TRIGGER check_user_update_trigger
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.check_user_update();
 
--- Prevent non-super-admins from changing subscription plans or employee limits on companies table
+-- Prevent non-super-admins from changing subscription plans, employee limits, active status, name, or slug on companies table
 CREATE OR REPLACE FUNCTION public.check_company_update()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -144,6 +147,15 @@ BEGIN
     END IF;
     IF OLD.max_employees IS DISTINCT FROM NEW.max_employees THEN
       RAISE EXCEPTION 'غير مسموح بتعديل الحد الأقصى للموظفين (max_employees) إلا من قبل المشرف العام.';
+    END IF;
+    IF OLD.is_active IS DISTINCT FROM NEW.is_active THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل حالة نشاط الشركة (is_active) إلا من قبل المشرف العام.';
+    END IF;
+    IF OLD.name IS DISTINCT FROM NEW.name THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل اسم الشركة إلا من قبل المشرف العام.';
+    END IF;
+    IF OLD.slug IS DISTINCT FROM NEW.slug THEN
+      RAISE EXCEPTION 'غير مسموح بتعديل رابط الشركة (slug) إلا من قبل المشرف العام.';
     END IF;
   END IF;
   RETURN NEW;
