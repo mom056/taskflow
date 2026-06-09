@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { Capacitor } from '@capacitor/core';
+import { registerNativePushToken } from '../lib/nativeServices';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
@@ -16,16 +18,26 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+// Safe check for web Notification API availability
+function getWebNotificationPermission(): NotificationPermission {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    return Notification.permission;
+  }
+  return 'default';
+}
+
 export function usePushNotifications(userId?: string) {
   const { profile } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>(
-    typeof window !== 'undefined' ? Notification.permission : 'default'
+    getWebNotificationPermission()
   );
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Check if browser is already subscribed
+  // Check if browser is already subscribed (web only)
   const checkSubscription = useCallback(async () => {
+    // Skip on native platforms — native push uses FCM/APNS, not Web Push
+    if (Capacitor.isNativePlatform()) return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !userId) {
       return;
     }
@@ -40,17 +52,45 @@ export function usePushNotifications(userId?: string) {
   }, [userId]);
 
   useEffect(() => {
-    if (userId) {
+    if (!userId) return;
+
+    if (Capacitor.isNativePlatform()) {
+      // On native, register for FCM/APNS push tokens
+      if (profile?.company_id) {
+        registerNativePushToken(userId, profile.company_id)
+          .then(() => setIsSubscribed(true))
+          .catch((err) => console.error('[PushNotifications] Native registration failed:', err));
+      }
+    } else {
+      // On web, check existing Web Push subscription
       checkSubscription();
     }
-  }, [userId, checkSubscription]);
+  }, [userId, profile?.company_id, checkSubscription]);
 
   const subscribeUser = useCallback(async () => {
+    if (!userId) return;
+
+    // Native: use FCM/APNS via nativeServices
+    if (Capacitor.isNativePlatform()) {
+      setLoading(true);
+      try {
+        if (profile?.company_id) {
+          await registerNativePushToken(userId, profile.company_id);
+          setIsSubscribed(true);
+        }
+        return true;
+      } catch (err) {
+        console.error('[PushNotifications] Native subscribe failed:', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // Web: use Web Push API
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       throw new Error('متصفحك لا يدعم الإشعارات الفورية (Push Notifications)');
     }
-
-    if (!userId) return;
 
     setLoading(true);
     try {
