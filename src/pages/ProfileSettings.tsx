@@ -267,6 +267,11 @@ export default function ProfileSettings() {
           <div className="text-center sm:text-right space-y-1">
             <h3 className="font-bold text-slate-900 text-base">{profile?.name || 'مستخدم جديد'}</h3>
             <p className="text-sm text-slate-500">{user?.email}</p>
+            {profile?.email && user?.email && profile.email.toLowerCase() !== user.email.toLowerCase() && (
+              <span className="text-xs text-amber-600 block font-semibold">
+                ⏳ بانتظار تأكيد البريد الجديد: {profile.email}
+              </span>
+            )}
             <div className="flex items-center gap-1.5 justify-center sm:justify-start text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full w-fit">
               <Shield className="w-3.5 h-3.5" />
               {profile?.role === 'super_admin' ? 'مشرف المنصة' : profile?.role === 'manager' ? 'مدير النظام' : 'موظف ميداني'}
