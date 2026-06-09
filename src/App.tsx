@@ -27,8 +27,17 @@ function CapacitorHandlers() {
 
     async function setupNativeHandlers() {
       const { App: CapApp } = await import('@capacitor/app');
+      const { StatusBar, Style } = await import('@capacitor/status-bar');
 
-      // 1. App State Change Listener (Resume)
+      // 1. Configure Status Bar to overlay webview so CSS env(safe-area-inset-top) works
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setStyle({ style: Style.Light }); // Dark text/icons for light background
+      } catch (err) {
+        console.warn('[StatusBar] Failed to configure status bar:', err);
+      }
+
+      // 2. App State Change Listener (Resume)
       activeListener = await CapApp.addListener('appStateChange', (state) => {
         if (state.isActive) {
           console.log('[AppState] App resumed, invalidating query cache and reconnecting supabase...');
@@ -37,7 +46,7 @@ function CapacitorHandlers() {
         }
       });
 
-      // 2. Hardware Back Button Listener (Android)
+      // 3. Hardware Back Button Listener (Android)
       backListener = await CapApp.addListener('backButton', () => {
         // Root pages where pressing back closes the app
         const rootPaths = ['/login', '/manager', '/employee', '/super-admin', '/'];
