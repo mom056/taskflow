@@ -27,27 +27,42 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
 
     let position = null;
     
+    // Attempt 1: Fresh High Accuracy scan (works best outdoors/with connection)
     try {
-      // 1. Try to get the last known location first (instant, works offline without GPS lock delay)
-      const lastKnown = await Geolocation.getLastKnownLocation();
-      if (lastKnown && lastKnown.timestamp && (Date.now() - lastKnown.timestamp < 300000)) { // Less than 5 minutes old
-        position = lastKnown;
-        console.log('[GPS] Using fresh last known location');
-      }
+      console.log('[GPS] Attempting fresh high accuracy position...');
+      position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 10000
+      });
     } catch (e) {
-      console.warn('[GPS] Failed to retrieve last known location:', e);
+      console.warn('[GPS] High accuracy position failed, trying low accuracy...', e);
+      
+      // Attempt 2: Coarse/Low Accuracy scan (works better offline/indoors, uses cell towers/cached status)
+      try {
+        position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 8000,
+          maximumAge: 30000
+        });
+      } catch (err) {
+        console.warn('[GPS] Low accuracy position failed, trying last known position...', err);
+        
+        // Attempt 3: Retrieve cached location from the OS (no time limits, any location is better than failing offline)
+        try {
+          const lastKnown = await Geolocation.getLastKnownLocation();
+          if (lastKnown) {
+            position = lastKnown;
+            console.log('[GPS] Successfully retrieved cached last known position');
+          }
+        } catch (lkErr) {
+          console.error('[GPS] Failed to retrieve last known position:', lkErr);
+        }
+      }
     }
 
     if (!position) {
-      // 2. If no fresh last known location, trigger active GPS scan
-      // We increase timeout to 25 seconds to give hardware GPS chip enough time to lock onto satellites offline.
-      // We set maximumAge to 60 seconds so the OS can return a recently cached coordinate instantly.
-      position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 25000,
-        maximumAge: 60000
-      });
-      console.log('[GPS] Obtained fresh position via active scanning');
+      throw new Error('تعذر تحديد موقعك الجغرافي. يرجى التأكد من تفعيل الـ GPS في هاتفك والوقوف في مكان مفتوح.');
     }
     
     return {
