@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -229,15 +230,19 @@ export default function SuperAdminDashboard() {
         </nav>
 
         <div className="mt-auto pt-4 border-t border-slate-800 space-y-3">
-          <div className="flex items-center gap-3 p-2">
-            <div className="w-9 h-9 bg-blue-600 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-bold border border-blue-500">
-              {(profile?.name || 'م')[0].toUpperCase()}
+          <Link to="/profile" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-800 transition-colors text-slate-300 no-underline cursor-pointer">
+            <div className="w-9 h-9 bg-blue-600 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-bold border border-blue-500 overflow-hidden">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="مشرف عام" className="w-full h-full object-cover" />
+              ) : (
+                (profile?.name || 'م')[0].toUpperCase()
+              )}
             </div>
             <div className="overflow-hidden">
               <div className="text-sm font-semibold truncate text-white leading-tight">{profile?.name || 'مشرف عام'}</div>
               <div className="text-xs text-slate-500 mt-0.5">Super Admin</div>
             </div>
-          </div>
+          </Link>
           <button
             onClick={signOut}
             className="flex items-center text-slate-400 hover:text-red-400 px-2 py-2 transition-colors w-full rounded-lg bg-transparent border-none cursor-pointer hover:bg-slate-800"
@@ -252,11 +257,20 @@ export default function SuperAdminDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
         
         {/* Mobile Header */}
-        <header className="md:hidden bg-slate-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-md">
-          <div className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-blue-500" />
-            <span className="text-sm font-bold">لوحة التحكم السحابية SaaS</span>
-          </div>
+        <header className="md:hidden bg-slate-900 text-white px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-md">
+          <Link to="/profile" className="flex items-center gap-2.5 text-white decoration-none no-underline cursor-pointer">
+            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-500">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="مشرف عام" className="w-full h-full object-cover" />
+              ) : (
+                (profile?.name || 'م')[0].toUpperCase()
+              )}
+            </div>
+            <div>
+              <span className="text-xs font-bold block leading-none">{profile?.name || 'مشرف عام'}</span>
+              <span className="text-[9px] text-blue-400 font-semibold block mt-0.5">لوحة المشرف</span>
+            </div>
+          </Link>
           <button onClick={signOut} className="p-2 hover:bg-slate-800 rounded-full border-none bg-transparent cursor-pointer">
             <LogOut className="w-4 h-4 text-slate-400" />
           </button>

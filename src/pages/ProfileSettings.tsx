@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,6 +13,7 @@ export default function ProfileSettings() {
 
   // Profile fields
   const [name, setName] = useState(profile?.name || '');
+  const [email, setEmail] = useState(profile?.email || user?.email || '');
   const [isUpdatingProfile, setUpdatingProfile] = useState(false);
   const [isUploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || '');
@@ -20,6 +21,14 @@ export default function ProfileSettings() {
   // Company Settings fields
   const [companyName, setCompanyName] = useState(company?.name || '');
   const [isUpdatingCompany, setUpdatingCompany] = useState(false);
+
+  // Sync state with auth context values once loaded
+  useEffect(() => {
+    if (profile?.name) setName(profile.name);
+    if (profile?.email || user?.email) setEmail(profile?.email || user?.email || '');
+    if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
+    if (company?.name) setCompanyName(company.name);
+  }, [profile, user, company]);
 
   // Password change fields
   const [newPassword, setNewPassword] = useState('');
@@ -35,21 +44,31 @@ export default function ProfileSettings() {
 
   const isManager = profile?.role === 'manager' || profile?.role === 'super_admin';
 
-  // 1. Update Profile (Name)
+  // 1. Update Profile (Name & Email)
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return toast.error('الاسم بالكامل مطلوب');
+    if (!email.trim()) return toast.error('البريد الإلكتروني مطلوب');
     
     setUpdatingProfile(true);
     try {
+      // Update public.users table
       const { error } = await supabase
         .from('users')
-        .update({ name })
+        .update({ name, email: email.trim() })
         .eq('id', user?.id);
 
       if (error) throw error;
       
-      toast.success('تم تحديث الملف الشخصي بنجاح');
+      // Update auth user if email changed
+      if (email.trim().toLowerCase() !== user?.email?.toLowerCase()) {
+        const { error: authError } = await supabase.auth.updateUser({ email: email.trim() });
+        if (authError) throw authError;
+        toast.success('تم تحديث البيانات. يرجى تأكيد البريد الإلكتروني الجديد عبر الرابط المرسل إليه.');
+      } else {
+        toast.success('تم تحديث الملف الشخصي بنجاح');
+      }
+      
       await refreshRole();
     } catch (err: any) {
       toast.error(err.message || 'تعذر تحديث البيانات');
@@ -262,7 +281,7 @@ export default function ProfileSettings() {
           <form onSubmit={handleUpdateProfile} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-7 h-7 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">ℹ️</span>
-              <h3 className="font-bold text-slate-800 text-sm">تعديل الاسم</h3>
+              <h3 className="font-bold text-slate-800 text-sm">بيانات الملف الشخصي</h3>
             </div>
             
             <div className="space-y-1">
@@ -273,6 +292,18 @@ export default function ProfileSettings() {
                 onChange={(e) => setName(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
                 placeholder="أدخل اسمك بالكامل"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-500">البريد الإلكتروني</label>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
+                placeholder="أدخل البريد الإلكتروني الجديد"
                 required
               />
             </div>
