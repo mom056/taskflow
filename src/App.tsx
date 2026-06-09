@@ -47,8 +47,21 @@ function CapacitorHandlers() {
       });
 
       // 3. Hardware Back Button Listener (Android)
-      backListener = await CapApp.addListener('backButton', () => {
-        // Root pages where pressing back closes the app
+      backListener = await CapApp.addListener('backButton', async () => {
+        // Run custom handlers first (like closing modals or tabs)
+        const handlers = (window as any).capBackButtonHandlers;
+        if (handlers && handlers.length > 0) {
+          const topHandler = handlers[0];
+          // Execute the handler
+          const prevented = await topHandler.fn();
+          // If the handler returned true or did not return false, we consider it handled
+          if (prevented !== false) {
+            console.log('[NativeBack] Back button handled by component registration:', topHandler.id);
+            return;
+          }
+        }
+
+        // Default behavior: exit app if on root route, otherwise navigate back in history
         const rootPaths = ['/login', '/manager', '/employee', '/super-admin', '/'];
         const isRootPath = rootPaths.includes(location.pathname);
 

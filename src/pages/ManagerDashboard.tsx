@@ -23,6 +23,8 @@ import EmployeePerformanceChart from '../components/charts/EmployeePerformanceCh
 import TaskStatusDonut from '../components/charts/TaskStatusDonut';
 import { useReportExport } from '../hooks/useReportExport';
 
+import { useBackButton } from '../hooks/useBackButton';
+
 export default function ManagerDashboard() {
   const { signOut, user, profile, company } = useAuth();
 
@@ -42,6 +44,23 @@ export default function ManagerDashboard() {
   const [visitsView, setVisitsView] = useState<'list' | 'map'>('list');
 
   const isLoading = tasksLoading || employeesLoading || visitsLoading;
+
+  // Intercept hardware back button on Android
+  useBackButton(() => {
+    if (isTaskModalOpen) {
+      setTaskModalOpen(false);
+      return true;
+    }
+    if (selectedTask) {
+      setSelectedTask(null);
+      return true;
+    }
+    if (activeTab !== 'overview') {
+      setActiveTab('overview');
+      return true;
+    }
+    return false; // Exit app
+  }, 10, true);
 
   useEffect(() => {
     const tasksSub = supabase.channel('manager_tasks')

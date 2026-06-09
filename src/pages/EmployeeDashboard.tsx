@@ -14,6 +14,8 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Capacitor } from '@capacitor/core';
 import { openExternalUrl, takeNativePhoto } from '../lib/nativeServices';
 
+import { useBackButton } from '../hooks/useBackButton';
+
 export default function EmployeeDashboard() {
   const { signOut, user, profile, company } = useAuth();
   const queryClient = useQueryClient();
@@ -37,6 +39,23 @@ export default function EmployeeDashboard() {
   const [taskNotes, setTaskNotes] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Intercept hardware back button on Android
+  useBackButton(() => {
+    if (isTaskFormOpen) {
+      setTaskFormOpen(false);
+      return true;
+    }
+    if (selectedTask) {
+      setSelectedTask(null);
+      return true;
+    }
+    if (activeTab !== 'active') {
+      setActiveTab('active');
+      return true;
+    }
+    return false; // Exit app
+  }, 10, true);
 
   // Realtime
   useEffect(() => {
