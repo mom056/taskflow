@@ -50,3 +50,17 @@ This file maintains the current structural and functional state of the TaskFlow 
 * Added expected MRR metrics card and active/suspended tabs and UI indicators.
 * Enabled frontend session rejection for users logging into inactive companies within `AuthContext.tsx`.
 * Native Capacitor synchronization and Vite build checks complete and compile successfully (exit code 0).
+
+---
+
+## 4. iOS Distribution & Build Strategy
+
+* **Automation Tool:** GitHub Actions workflow configured in `.github/workflows/ios-build.yml` running on `macos-latest` runner.
+* **Prerequisites for deployment:**
+  1. Paid Apple Developer Account ($99/year) to sign applications for testing/production.
+  2. Registered test device UDIDs in Apple Developer Portal for Ad-Hoc distribution.
+  3. Signing credentials encoded in Base64 and stored under GitHub repository secrets:
+     * `BUILD_CERTIFICATE_BASE64`: Private signing certificate (`.p12`).
+     * `P12_PASSWORD`: Password protecting the `.p12` certificate.
+     * `BUILD_PROVISION_PROFILE_BASE64`: Provisioning profile (`.mobileprovision`).
+* **Build Trigger:** Manually triggered via GitHub Actions tab (`iOS Production Build`). Yields a downloadable `app-release.ipa` package that can be shared via Diawi or uploaded to App Store/TestFlight.
