@@ -54,18 +54,12 @@ export function usePushNotifications(userId?: string) {
   useEffect(() => {
     if (!userId) return;
 
-    if (Capacitor.isNativePlatform()) {
-      // On native, register for FCM/APNS push tokens
-      if (profile?.company_id) {
-        registerNativePushToken(userId, profile.company_id)
-          .then(() => setIsSubscribed(true))
-          .catch((err) => console.error('[PushNotifications] Native registration failed:', err));
-      }
-    } else {
-      // On web, check existing Web Push subscription
+    // On mount: only CHECK existing subscription status, never auto-register.
+    // Registration must be triggered by explicit user action (subscribeUser button).
+    if (!Capacitor.isNativePlatform()) {
       checkSubscription();
     }
-  }, [userId, profile?.company_id, checkSubscription]);
+  }, [userId, checkSubscription]);
 
   const subscribeUser = useCallback(async () => {
     if (!userId) return;

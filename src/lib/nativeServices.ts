@@ -90,47 +90,63 @@ export async function takeNativePhoto(): Promise<File | null> {
   return null; // Web fallback uses traditional input type="file"
 }
 
-// Helper to register native push tokens (FCM/APNS) and save to database
+// Helper to register native push tokens (FCM/APNS) and save to database.
+// IMPORTANT: This should only be called from explicit user action (button press),
+// never auto-invoked on mount, to comply with OS guidelines and prevent crashes
+// when Firebase/APNS is not configured.
 export async function registerNativePushToken(userId: string, companyId: string): Promise<void> {
   if (!Capacitor.isNativePlatform() || !userId) return;
 
-  try {
-    const { PushNotifications } = await import('@capacitor/push-notifications');
-    
-    let perm = await PushNotifications.checkPermissions();
-    if (perm.receive !== 'granted') {
-      perm = await PushNotifications.requestPermissions();
-    }
+  const { PushNotifications } = await import('@capacitor/push-notifications');
 
-    if (perm.receive === 'granted') {
-      await PushNotifications.register();
-
-      // Clear existing listeners to prevent duplicates
-      await PushNotifications.removeAllListeners();
-
-      await PushNotifications.addListener('registration', async (token) => {
-        console.log('[NativePush] Device registered successfully. Token:', token.value);
-        
-        // Save the device token to public.push_subscriptions
-        const { error } = await supabase.from('push_subscriptions').upsert([
-          {
-            user_id: userId,
-            device_token: token.value,
-            company_id: companyId,
-            created_at: Date.now()
-          }
-        ], { onConflict: 'device_token' }); // Create unique constraint or upsert based on user_id/device_token later
-
-        if (error) {
-          console.error('[NativePush] Failed to save token to database:', error.message);
-        }
-      });
-
-      await PushNotifications.addListener('registrationError', (err) => {
-        console.error('[NativePush] Registration error:', err.error);
-      });
-    }
-  } catch (err) {
-    console.error('[NativePush] Failed setup:', err);
+  let perm = await PushNotifications.checkPermissions();
+  if (perm.receive !== 'granted') {
+    perm = await PushNotifications.requestPermissions();
   }
+
+  if (perm.receive !== 'granted') {
+    throw new Error('تم رفض صلاحية الإشعارات. يرجى تفعيلها من إعدادات الهاتف.');
+  }
+
+  // Clear existing listeners to prevent duplicates
+  await PushNotifications.removeAllListeners();
+
+  // Set up listeners BEFORE calling register() — this is the correct Capacitor pattern.
+  // If Firebase/APNS is not configured, the 'registrationError' listener catches the failure
+  // gracefully instead of crashing the app.
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('انتهت مهلة تسجيل الإشعارات. تأكد من إعداد خدمات الإشعارات (Firebase/APNS).'));
+    }, 10000);
+
+    PushNotifications.addListener('registration', async (token) => {
+      clearTimeout(timeout);
+      console.log('[NativePush] Device registered. Token:', token.value);
+
+      const { error } = await supabase.from('push_subscriptions').upsert([
+        {
+          user_id: userId,
+          device_token: token.value,
+          company_id: companyId,
+          created_at: Date.now()
+        }
+      ], { onConflict: 'device_token' });
+
+      if (error) {
+        console.error('[NativePush] Failed to save token:', error.message);
+        reject(new Error('فشل حفظ رمز الجهاز في قاعدة البيانات'));
+      } else {
+        resolve();
+      }
+    });
+
+    PushNotifications.addListener('registrationError', (err) => {
+      clearTimeout(timeout);
+      console.error('[NativePush] Registration error:', err.error);
+      reject(new Error('فشل تسجيل الإشعارات. تأكد من إعداد خدمات Firebase/APNS.'));
+    });
+
+    // Now trigger the actual registration
+    PushNotifications.register();
+  });
 }
