@@ -54,9 +54,21 @@ export function usePushNotifications(userId?: string) {
   useEffect(() => {
     if (!userId) return;
 
-    // On mount: only CHECK existing subscription status, never auto-register.
+    // On mount: CHECK existing subscription status, never auto-register.
     // Registration must be triggered by explicit user action (subscribeUser button).
-    if (!Capacitor.isNativePlatform()) {
+    if (Capacitor.isNativePlatform()) {
+      // On native: check if this user already has a device token saved in the database
+      supabase.from('push_subscriptions')
+        .select('id')
+        .eq('user_id', userId)
+        .not('device_token', 'is', null)
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setIsSubscribed(true);
+          }
+        });
+    } else {
       checkSubscription();
     }
   }, [userId, checkSubscription]);
