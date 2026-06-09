@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, TaskStatus, statusLabels, statusColors } from '../types';
-import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft, Map } from 'lucide-react';
+import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft, Map, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskMap from '../components/TaskMap';
@@ -34,6 +34,17 @@ export default function ManagerDashboard() {
   const { users: employees, isLoading: employeesLoading, isError: usersErrorObj, error: usersError } = useUsers('employee');
   const { visits, isLoading: visitsLoading, isError: visitsErrorObj, error: visitsError } = useVisits();
 
+  // Map each employee ID to their active task if they are currently working on one (status = in_progress)
+  const employeeActiveTasks = useMemo(() => {
+    const activeMap: Record<string, Task> = {};
+    tasks.forEach(task => {
+      if (task.status === 'in_progress' && task.employeeId) {
+        activeMap[task.employeeId] = task;
+      }
+    });
+    return activeMap;
+  }, [tasks]);
+
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics'>('overview');
 
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
@@ -41,6 +52,16 @@ export default function ManagerDashboard() {
 
   const [isTaskDetailsModalOpen, setTaskDetailsModalOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
+
+  // Employee management states
+  const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [editEmpName, setEditEmpName] = useState('');
+  const [editEmpEmail, setEditEmpEmail] = useState('');
+  const [editEmpPassword, setEditEmpPassword] = useState('');
+  const [editEmpRole, setEditEmpRole] = useState<'manager' | 'employee'>('employee');
+  const [updatingEmployee, setUpdatingEmployee] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
@@ -125,6 +146,76 @@ export default function ManagerDashboard() {
       ),
       { duration: 6000 }
     );
+  };
+
+  const openEditEmployee = (emp: any) => {
+    setSelectedEmployee(emp);
+    setEditEmpName(emp.name);
+    setEditEmpEmail(emp.email);
+    setEditEmpRole(emp.role);
+    setEditEmpPassword(''); // Reset password field
+    setEmployeeModalOpen(true);
+  };
+
+  const handleUpdateEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editEmpName.trim() || !editEmpEmail.trim()) {
+      return toast.error('يرجى ملء الاسم والبريد الإلكتروني');
+    }
+
+    setUpdatingEmployee(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'update',
+          userId: selectedEmployee.id,
+          name: editEmpName,
+          email: editEmpEmail,
+          role: editEmpRole,
+          password: editEmpPassword ? editEmpPassword : undefined
+        }
+      });
+
+      if (error) throw new Error(error.message || 'فشل تحديث بيانات الموظف');
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('تم تحديث بيانات الموظف بنجاح');
+      setEmployeeModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      toast.error(err.message || 'فشل تحديث بيانات الموظف');
+    } finally {
+      setUpdatingEmployee(false);
+    }
+  };
+
+  const openDeleteEmployee = (emp: any) => {
+    setSelectedEmployee(emp);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!selectedEmployee) return;
+    setUpdatingEmployee(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'delete',
+          userId: selectedEmployee.id
+        }
+      });
+
+      if (error) throw new Error(error.message || 'فشل حذف الموظف');
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('تم حذف الموظف بنجاح');
+      setDeleteConfirmOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      toast.error(err.message || 'فشل حذف الموظف');
+    } finally {
+      setUpdatingEmployee(false);
+    }
   };
 
   const getEmployeeName = (id: string) => employees.find(e => e.id === id)?.name || 'غير معروف';
@@ -517,19 +608,69 @@ export default function ManagerDashboard() {
                       <tr>
                         <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الاسم</th>
                         <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">البريد الإلكتروني</th>
+                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الدور الوظيفي</th>
+                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الحالة الحالية</th>
                         <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">تاريخ الانضمام</th>
+                        <th className="text-center p-4 border-b border-slate-100 text-slate-400 text-sm font-medium w-32">الإجراءات</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {employees.map(emp => (
-                        <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-4 border-b border-slate-50 text-sm font-semibold text-slate-900">{emp.name}</td>
-                          <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{emp.email}</td>
-                          <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{format(emp.createdAt, 'yyyy/MM/dd')}</td>
-                        </tr>
-                      ))}
+                      {employees.map(emp => {
+                        const activeTask = employeeActiveTasks[emp.id];
+                        const isSelf = emp.id === user?.id;
+                        return (
+                          <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 border-b border-slate-50 text-sm font-semibold text-slate-900">{emp.name}</td>
+                            <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{emp.email}</td>
+                            <td className="p-4 border-b border-slate-50 text-sm">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                emp.role === 'manager' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-700 border border-slate-100'
+                              }`}>
+                                {emp.role === 'manager' ? 'مدير' : 'موظف'}
+                              </span>
+                            </td>
+                            <td className="p-4 border-b border-slate-50 text-sm">
+                              {activeTask ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                  </span>
+                                  في مهمة: <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                  <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+                                  متاح
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{format(emp.createdAt, 'yyyy/MM/dd')}</td>
+                            <td className="p-4 border-b border-slate-50 text-center">
+                              <div className="flex justify-center gap-2">
+                                <button
+                                  onClick={() => openEditEmployee(emp)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 border-none bg-transparent rounded-lg transition-colors cursor-pointer"
+                                  title="تعديل بيانات الموظف"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                {!isSelf && (
+                                  <button
+                                    onClick={() => openDeleteEmployee(emp)}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 border-none bg-transparent rounded-lg transition-colors cursor-pointer"
+                                    title="حذف الموظف نهائياً"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {employees.length === 0 && (
-                        <tr><td colSpan={3} className="p-6 text-center text-slate-400">لا يوجد موظفون مسجلون</td></tr>
+                        <tr><td colSpan={6} className="p-6 text-center text-slate-400">لا يوجد موظفون مسجلون</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -538,18 +679,70 @@ export default function ManagerDashboard() {
 
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
-                {employees.map(emp => (
-                  <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-4">
-                    <div className="w-11 h-11 bg-linear-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center text-white font-bold text-base shrink-0">
-                      {emp.name?.[0]?.toUpperCase() || '؟'}
+                {employees.map(emp => {
+                  const activeTask = employeeActiveTasks[emp.id];
+                  const isSelf = emp.id === user?.id;
+                  return (
+                    <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-linear-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                          {emp.name?.[0]?.toUpperCase() || '؟'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 text-sm">{emp.name}</div>
+                          <div className="text-xs text-slate-400 mt-0.5 truncate">{emp.email}</div>
+                        </div>
+                        <div className="text-[10px] text-slate-400 shrink-0">{format(emp.createdAt, 'yyyy/MM/dd')}</div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
+                        <span className="text-xs text-slate-400">الدور الوظيفي</span>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          emp.role === 'manager' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-700 border border-slate-100'
+                        }`}>
+                          {emp.role === 'manager' ? 'مدير' : 'موظف'}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
+                        <span className="text-xs text-slate-400">الحالة الميدانية</span>
+                        {activeTask ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                            </span>
+                            في مهمة: <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                            متاح
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-50 flex justify-end gap-3">
+                        <button
+                          onClick={() => openEditEmployee(emp)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          تعديل
+                        </button>
+                        {!isSelf && (
+                          <button
+                            onClick={() => openDeleteEmployee(emp)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs text-rose-600 bg-rose-50/50 hover:bg-rose-50 border border-rose-100 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            حذف
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-900 text-sm">{emp.name}</div>
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{emp.email}</div>
-                    </div>
-                    <div className="text-xs text-slate-400 shrink-0">{format(emp.createdAt, 'yyyy/MM/dd')}</div>
-                  </div>
-                ))}
+                  );
+                })}
                 {employees.length === 0 && (
                   <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100">
                     لا يوجد موظفون مسجلون
@@ -776,6 +969,122 @@ export default function ManagerDashboard() {
             openEditTask(task);
           }}
         />
+      )}
+
+      {/* ── EMPLOYEE EDIT MODAL ── */}
+      {isEmployeeModalOpen && selectedEmployee && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-md overflow-hidden animate-scale-up" dir="rtl">
+            <div className="px-6 py-5 border-b border-slate-50 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-800 m-0">تعديل بيانات الموظف</h2>
+              <button
+                onClick={() => setEmployeeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 bg-transparent border-none text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleUpdateEmployee} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">الاسم كامل</label>
+                <input
+                  type="text"
+                  value={editEmpName}
+                  onChange={(e) => setEditEmpName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">البريد الإلكتروني (حساب الدخول)</label>
+                <input
+                  type="email"
+                  value={editEmpEmail}
+                  onChange={(e) => setEditEmpEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  required
+                />
+                <p className="text-[10px] text-amber-600 mt-1.5 font-medium leading-relaxed bg-amber-50 px-3 py-2 rounded-xl border border-amber-100/50">
+                  ⚠️ تنبيه: تعديل البريد الإلكتروني سيغير اسم المستخدم الذي يسجل به الموظف دخوله فوراً.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">الدور الوظيفي</label>
+                <select
+                  value={editEmpRole}
+                  onChange={(e) => setEditEmpRole(e.target.value as 'manager' | 'employee')}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                >
+                  <option value="employee">موظف ميداني</option>
+                  <option value="manager">مدير</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">كلمة مرور جديدة (اختياري)</label>
+                <input
+                  type="password"
+                  placeholder="اتركه فارغاً للاحتفاظ بكلمة المرور الحالية"
+                  value={editEmpPassword}
+                  onChange={(e) => setEditEmpPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-50">
+                <button
+                  type="submit"
+                  disabled={updatingEmployee}
+                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors border-none cursor-pointer flex items-center justify-center"
+                >
+                  {updatingEmployee ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmployeeModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors border-none cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EMPLOYEE DELETE CONFIRM MODAL ── */}
+      {isDeleteConfirmOpen && selectedEmployee && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-sm p-6 space-y-4 text-center animate-scale-up" dir="rtl">
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl mx-auto border border-rose-100">
+              ⚠️
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">حذف الموظف نهائياً</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                هل أنت متأكد من رغبتك في حذف الموظف <span className="font-bold text-slate-800">{selectedEmployee.name}</span>؟<br />
+                سيتم إلغاء حساب دخول الموظف فوراً ولن يتمكن من الوصول للتطبيق مجدداً. هذا الإجراء لا يمكن التراجع عنه.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleDeleteEmployee}
+                disabled={updatingEmployee}
+                className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 transition-colors border-none cursor-pointer flex items-center justify-center"
+              >
+                {updatingEmployee ? 'جاري الحذف...' : 'نعم، احذف الحساب'}
+              </button>
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors border-none cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
