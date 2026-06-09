@@ -25,11 +25,30 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
       }
     }
 
-    const position = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    });
+    let position = null;
+    
+    try {
+      // 1. Try to get the last known location first (instant, works offline without GPS lock delay)
+      const lastKnown = await Geolocation.getLastKnownLocation();
+      if (lastKnown && lastKnown.timestamp && (Date.now() - lastKnown.timestamp < 300000)) { // Less than 5 minutes old
+        position = lastKnown;
+        console.log('[GPS] Using fresh last known location');
+      }
+    } catch (e) {
+      console.warn('[GPS] Failed to retrieve last known location:', e);
+    }
+
+    if (!position) {
+      // 2. If no fresh last known location, trigger active GPS scan
+      // We increase timeout to 25 seconds to give hardware GPS chip enough time to lock onto satellites offline.
+      // We set maximumAge to 60 seconds so the OS can return a recently cached coordinate instantly.
+      position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 25000,
+        maximumAge: 60000
+      });
+      console.log('[GPS] Obtained fresh position via active scanning');
+    }
     
     return {
       latitude: position.coords.latitude,
