@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import TasksTable from '../components/TasksTable';
 import TaskModal from '../components/TaskModal';
+import TaskDetailsModal from '../components/TaskDetailsModal';
 import MobileBottomNav from '../components/MobileBottomNav';
 import KPICard from '../components/KPICard';
 import WeeklyPerformanceChart from '../components/charts/WeeklyPerformanceChart';
@@ -38,6 +39,9 @@ export default function ManagerDashboard() {
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
+  const [isTaskDetailsModalOpen, setTaskDetailsModalOpen] = useState(false);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
@@ -45,10 +49,19 @@ export default function ManagerDashboard() {
 
   const isLoading = tasksLoading || employeesLoading || visitsLoading;
 
+  const openTaskDetails = (task: Task) => {
+    setViewingTask(task);
+    setTaskDetailsModalOpen(true);
+  };
+
   // Intercept hardware back button on Android
   useBackButton(() => {
     if (isTaskModalOpen) {
       setTaskModalOpen(false);
+      return true;
+    }
+    if (isTaskDetailsModalOpen) {
+      setTaskDetailsModalOpen(false);
       return true;
     }
     if (selectedTask) {
@@ -184,7 +197,10 @@ export default function ManagerDashboard() {
   // Mobile task card component (inline)
   // ─────────────────────────────────────────────────────────────────────────────
   const MobileTaskCard = ({ task }: { task: Task }) => (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3 active:scale-[0.99] transition-transform">
+    <div 
+      onClick={() => openTaskDetails(task)}
+      className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3 active:scale-[0.99] transition-transform cursor-pointer"
+    >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-slate-900 text-sm leading-snug flex-1">{task.title}</h3>
         <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
@@ -215,7 +231,7 @@ export default function ManagerDashboard() {
         )}
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-slate-50">
+      <div className="flex gap-2 pt-1 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => openEditTask(task)}
           className="flex-1 py-2 rounded-xl text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
@@ -422,7 +438,7 @@ export default function ManagerDashboard() {
 
                 {/* Desktop table */}
                 <div className="hidden md:block">
-                  <TasksTable tasks={tasks.slice(0, 5)} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} />
+                  <TasksTable tasks={tasks.slice(0, 5)} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} onView={openTaskDetails} />
                 </div>
 
                 {/* Mobile cards */}
@@ -472,7 +488,7 @@ export default function ManagerDashboard() {
 
               {/* Desktop table */}
               <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <TasksTable tasks={filteredTasks} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} />
+                <TasksTable tasks={filteredTasks} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} onView={openTaskDetails} />
               </div>
 
               {/* Mobile cards */}
@@ -744,6 +760,21 @@ export default function ManagerDashboard() {
           task={selectedTask}
           employees={employees}
           currentUserId={user.id}
+        />
+      )}
+
+      {/* ── TASK DETAILS MODAL ── */}
+      {isTaskDetailsModalOpen && (
+        <TaskDetailsModal
+          isOpen={isTaskDetailsModalOpen}
+          onClose={() => { setTaskDetailsModalOpen(false); setViewingTask(null); }}
+          task={viewingTask}
+          employees={employees}
+          onEditClick={(task) => {
+            setTaskDetailsModalOpen(false);
+            setViewingTask(null);
+            openEditTask(task);
+          }}
         />
       )}
     </div>
