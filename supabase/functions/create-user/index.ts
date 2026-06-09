@@ -62,100 +62,240 @@ serve(async (req) => {
     }
 
     // 3. Parse input body parameters
-    const { email, password, name, role } = await req.json();
-    if (!email || !password || !name || !role) {
-      return new Response(JSON.stringify({ error: 'Name, email, password, and role are required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    const body = await req.json();
+    const action = body.action || 'create';
 
-    if (role !== 'employee' && role !== 'manager') {
-      return new Response(JSON.stringify({ error: 'Invalid user role' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    if (action === 'create') {
+      const { email, password, name, role } = body;
+      if (!email || !password || !name || !role) {
+        return new Response(JSON.stringify({ error: 'Name, email, password, and role are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-    // Fetch company info to check employee limit
-    const { data: company, error: companyError } = await supabaseAdmin
-      .from('companies')
-      .select('plan, max_employees')
-      .eq('id', companyId)
-      .single();
+      if (role !== 'employee' && role !== 'manager') {
+        return new Response(JSON.stringify({ error: 'Invalid user role' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-    if (companyError || !company) {
-      return new Response(JSON.stringify({ error: 'Failed to retrieve company subscription details' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+      // Fetch company info to check employee limit
+      const { data: company, error: companyError } = await supabaseAdmin
+        .from('companies')
+        .select('plan, max_employees')
+        .eq('id', companyId)
+        .single();
 
-    // Count current employees in this company
-    const { count: currentEmployeeCount, error: countError } = await supabaseAdmin
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId)
-      .eq('role', 'employee');
+      if (companyError || !company) {
+        return new Response(JSON.stringify({ error: 'Failed to retrieve company subscription details' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-    if (countError) {
-      return new Response(JSON.stringify({ error: 'Failed to count company employees' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+      // Count current employees in this company
+      const { count: currentEmployeeCount, error: countError } = await supabaseAdmin
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('role', 'employee');
 
-    // Only enforce limits on 'employee' roles
-    if (role === 'employee' && (currentEmployeeCount ?? 0) >= company.max_employees) {
-      return new Response(JSON.stringify({ 
-        error: `لقد تجاوزت الحد الأقصى للموظفين المسموح به لباقة اشتراكك (${company.max_employees} موظفين). يرجى الترقية لإضافة المزيد.` 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+      if (countError) {
+        return new Response(JSON.stringify({ error: 'Failed to count company employees' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-    console.log(`[AdminRegister] Manager ${callerUser.email} is creating user ${email}`);
+      // Only enforce limits on 'employee' roles
+      if (role === 'employee' && (currentEmployeeCount ?? 0) >= company.max_employees) {
+        return new Response(JSON.stringify({ 
+          error: `لقد تجاوزت الحد الأقصى للموظفين المسموح به لباقة اشتراكك (${company.max_employees} موظفين). يرجى الترقية لإضافة المزيد.` 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-    // 4. Create user in auth schema via admin API
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name }
-    });
+      console.log(`[AdminRegister] Manager ${callerUser.email} is creating user ${email}`);
 
-    if (authError || !authData.user) {
-      throw authError || new Error('Auth creation failed');
-    }
-
-    const newUserId = authData.user.id;
-
-    // 5. Create user profile in public.users table
-    const { error: insertError } = await supabaseAdmin
-      .from('users')
-      .insert({
-        id: newUserId,
-        name,
+      // 4. Create user in auth schema via admin API
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        role,
-        company_id: companyId,
-        created_at: Date.now()
+        password,
+        email_confirm: true,
+        user_metadata: { name }
       });
 
-    if (insertError) {
-      // Rollback auth user creation if profile creation fails
-      await supabaseAdmin.auth.admin.deleteUser(newUserId);
-      throw insertError;
-    }
+      if (authError || !authData.user) {
+        throw authError || new Error('Auth creation failed');
+      }
 
-    return new Response(JSON.stringify({ 
-      message: 'User created successfully',
-      user: { id: newUserId, name, email, role } 
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+      const newUserId = authData.user.id;
+
+      // 5. Create user profile in public.users table
+      const { error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: newUserId,
+          name,
+          email,
+          role,
+          company_id: companyId,
+          created_at: Date.now()
+        });
+
+      if (insertError) {
+        // Rollback auth user creation if profile creation fails
+        await supabaseAdmin.auth.admin.deleteUser(newUserId);
+        throw insertError;
+      }
+
+      return new Response(JSON.stringify({ 
+        message: 'User created successfully',
+        user: { id: newUserId, name, email, role } 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } else if (action === 'update') {
+      const { userId, email, password, name, role } = body;
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'User ID is required for update action' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // 1. Verify target user belongs to same company
+      const { data: targetUser, error: targetUserError } = await supabaseAdmin
+        .from('users')
+        .select('company_id, role')
+        .eq('id', userId)
+        .single();
+
+      if (targetUserError || !targetUser) {
+        return new Response(JSON.stringify({ error: 'Target user not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (targetUser.company_id !== companyId) {
+        return new Response(JSON.stringify({ error: 'Access denied: Target user is in a different tenant' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (targetUser.role === 'super_admin' && callerProfile.role !== 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Access denied: Cannot edit super admin' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`[AdminRegister] Manager ${callerUser.email} is updating user ${userId}`);
+
+      // 2. Update Auth schema
+      const authUpdates: any = {};
+      if (email) authUpdates.email = email;
+      if (password) authUpdates.password = password;
+      if (name) authUpdates.user_metadata = { name };
+
+      if (Object.keys(authUpdates).length > 0) {
+        const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdates);
+        if (authUpdateError) throw authUpdateError;
+      }
+
+      // 3. Update public.users profile
+      const profileUpdates: any = {};
+      if (name) profileUpdates.name = name;
+      if (email) profileUpdates.email = email;
+      if (role) {
+        if (role !== 'employee' && role !== 'manager') {
+          return new Response(JSON.stringify({ error: 'Invalid user role' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        profileUpdates.role = role;
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileUpdateError } = await supabaseAdmin
+          .from('users')
+          .update(profileUpdates)
+          .eq('id', userId);
+        if (profileUpdateError) throw profileUpdateError;
+      }
+
+      return new Response(JSON.stringify({ 
+        message: 'User updated successfully'
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } else if (action === 'delete') {
+      const { userId } = body;
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'User ID is required for delete action' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // 1. Verify target user belongs to same company
+      const { data: targetUser, error: targetUserError } = await supabaseAdmin
+        .from('users')
+        .select('company_id, role')
+        .eq('id', userId)
+        .single();
+
+      if (targetUserError || !targetUser) {
+        return new Response(JSON.stringify({ error: 'Target user not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (targetUser.company_id !== companyId) {
+        return new Response(JSON.stringify({ error: 'Access denied: Target user is in a different tenant' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (targetUser.role === 'super_admin' && callerProfile.role !== 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Access denied: Cannot delete super admin' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`[AdminRegister] Manager ${callerUser.email} is deleting user ${userId}`);
+
+      // 2. Delete user in Auth (this cascades to users table)
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (deleteError) throw deleteError;
+
+      return new Response(JSON.stringify({ 
+        message: 'User deleted successfully'
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } else {
+      return new Response(JSON.stringify({ error: 'Invalid action parameter' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
   } catch (err: any) {
     console.error('[AdminRegister] Error:', err);
