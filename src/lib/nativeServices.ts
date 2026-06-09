@@ -12,7 +12,7 @@ export async function openExternalUrl(url: string): Promise<void> {
 }
 
 // Helper to get GPS coordinates reliably on mobile vs web
-export async function getNativeLocation(): Promise<{ latitude: number; longitude: number }> {
+export async function getNativeLocation(): Promise<{ latitude: number; longitude: number; approximate: boolean; accuracyMeters?: number }> {
   if (Capacitor.isNativePlatform()) {
     const { Geolocation } = await import('@capacitor/geolocation');
     
@@ -26,6 +26,7 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
     }
 
     let position = null;
+    let approximate = false;
     
     // Attempt 1: Fresh High Accuracy scan (works best outdoors/with connection)
     try {
@@ -45,6 +46,7 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
           timeout: 8000,
           maximumAge: 300000 // Allow up to 5 minutes cached
         });
+        approximate = true; // Mark as approximate since we used low accuracy
       } catch (err) {
         console.warn('[GPS] Low accuracy position failed, trying cached position fallback...', err);
         
@@ -55,6 +57,7 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
             timeout: 3000, // Short timeout
             maximumAge: 86400000 // 24 hours
           });
+          approximate = true; // Cached location is definitely approximate
           console.log('[GPS] Successfully retrieved cached position fallback');
         } catch (lkErr) {
           console.error('[GPS] Failed to retrieve cached position fallback:', lkErr);
@@ -68,7 +71,9 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
     
     return {
       latitude: position.coords.latitude,
-      longitude: position.coords.longitude
+      longitude: position.coords.longitude,
+      approximate,
+      accuracyMeters: position.coords.accuracy ?? undefined
     };
   } else {
     // Fallback to web browser Geolocation API
@@ -78,7 +83,7 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, approximate: false, accuracyMeters: pos.coords.accuracy ?? undefined }),
         (err) => {
           let errMsg = 'فشل في التقاط موقعك الجغرافي';
           if (err.code === err.PERMISSION_DENIED) {

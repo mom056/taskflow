@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, TaskStatus, statusLabels, statusColors } from '../types';
-import { LogOut, FileText, Search, Plus, MapPin, Calendar, User, ChevronLeft, Map, Edit2, Trash2 } from 'lucide-react';
+import { Task, TaskStatus, statusLabels, statusColors, User } from '../types';
+import { LogOut, FileText, Search, Plus, MapPin, Calendar, User as UserIcon, ChevronLeft, Map, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskMap from '../components/TaskMap';
@@ -54,7 +54,7 @@ export default function ManagerDashboard() {
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
 
   // Employee management states
-  const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
   const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [editEmpName, setEditEmpName] = useState('');
@@ -148,11 +148,11 @@ export default function ManagerDashboard() {
     );
   };
 
-  const openEditEmployee = (emp: any) => {
+  const openEditEmployee = (emp: User) => {
     setSelectedEmployee(emp);
     setEditEmpName(emp.name);
     setEditEmpEmail(emp.email);
-    setEditEmpRole(emp.role);
+    setEditEmpRole(emp.role === 'super_admin' ? 'manager' : emp.role);
     setEditEmpPassword(''); // Reset password field
     setEmployeeModalOpen(true);
   };
@@ -161,6 +161,9 @@ export default function ManagerDashboard() {
     e.preventDefault();
     if (!editEmpName.trim() || !editEmpEmail.trim()) {
       return toast.error('يرجى ملء الاسم والبريد الإلكتروني');
+    }
+    if (editEmpPassword && editEmpPassword.length < 6) {
+      return toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
     }
 
     setUpdatingEmployee(true);
@@ -189,7 +192,7 @@ export default function ManagerDashboard() {
     }
   };
 
-  const openDeleteEmployee = (emp: any) => {
+  const openDeleteEmployee = (emp: User) => {
     setSelectedEmployee(emp);
     setDeleteConfirmOpen(true);
   };
@@ -305,7 +308,7 @@ export default function ManagerDashboard() {
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1 text-xs text-slate-500">
-          <User className="w-3.5 h-3.5" />
+          <UserIcon className="w-3.5 h-3.5" />
           <span>{getEmployeeName(task.employeeId)}</span>
         </div>
         {task.location && (
@@ -909,7 +912,7 @@ export default function ManagerDashboard() {
                   value={topEmployee} 
                   change="الأكثر إنجازاً" 
                   isPositive={true}
-                  icon={<User className="w-5 h-5" />} 
+                  icon={<UserIcon className="w-5 h-5" />} 
                 />
               </div>
 

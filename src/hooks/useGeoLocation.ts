@@ -4,6 +4,8 @@ import { getNativeLocation } from '../lib/nativeServices';
 export interface LocationCoords {
   latitude: number;
   longitude: number;
+  approximate?: boolean;
+  accuracyMeters?: number;
 }
 
 export function useGeoLocation() {
@@ -14,9 +16,9 @@ export function useGeoLocation() {
     setLoading(true);
     setError(null);
     try {
-      const coords = await getNativeLocation();
+      const result = await getNativeLocation();
       setLoading(false);
-      return coords;
+      return result;
     } catch (err: any) {
       setLoading(false);
       const errMsg = err.message || 'فشل في التقاط موقعك الجغرافي';

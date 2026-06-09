@@ -135,6 +135,13 @@ export default function EmployeeDashboard() {
           : 'تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓', 
           { id: toastId }
         );
+        // Warn when location is approximate (cached or low-accuracy)
+        if (coords.approximate) {
+          toast('⚠️ تنبيه: الموقع المسجل تقريبي وقد لا يمثل مكانك الحالي بدقة. حاول الانتقال لمكان مفتوح لتحسين الدقة.', {
+            duration: 6000,
+            icon: '📍',
+          });
+        }
       } catch (err: any) {
         toast.error(err.message || 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.', { id: toastId });
         return; // Block status change if GPS coordinate capture fails
