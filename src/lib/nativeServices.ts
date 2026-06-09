@@ -115,12 +115,23 @@ export async function registerNativePushToken(userId: string, companyId: string)
   // If Firebase/APNS is not configured, the 'registrationError' listener catches the failure
   // gracefully instead of crashing the app.
   return new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    let settled = false;
+
+    const cleanup = async () => {
+      clearTimeout(timeout);
+      if (!settled) {
+        settled = true;
+        await PushNotifications.removeAllListeners();
+      }
+    };
+
+    const timeout = setTimeout(async () => {
+      await cleanup();
       reject(new Error('انتهت مهلة تسجيل الإشعارات. تأكد من إعداد خدمات الإشعارات (Firebase/APNS).'));
     }, 10000);
 
     PushNotifications.addListener('registration', async (token) => {
-      clearTimeout(timeout);
+      await cleanup();
       console.log('[NativePush] Device registered. Token:', token.value);
 
       const { error } = await supabase.from('push_subscriptions').upsert([
@@ -140,8 +151,8 @@ export async function registerNativePushToken(userId: string, companyId: string)
       }
     });
 
-    PushNotifications.addListener('registrationError', (err) => {
-      clearTimeout(timeout);
+    PushNotifications.addListener('registrationError', async (err) => {
+      await cleanup();
       console.error('[NativePush] Registration error:', err.error);
       reject(new Error('فشل تسجيل الإشعارات. تأكد من إعداد خدمات Firebase/APNS.'));
     });

@@ -218,15 +218,21 @@ serve(async (req) => {
     // Prepare FCM access token (if we have native subscriptions)
     let accessToken = '';
     let serviceAccount: any = null;
+    let fcmError = '';
     const hasNativeSubs = subscriptions.some(s => s.device_token);
 
-    if (hasNativeSubs && FIREBASE_SERVICE_ACCOUNT_JSON) {
-      try {
-        serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
-        accessToken = await getAccessToken(serviceAccount);
-        console.log('[PushService] FCM access token obtained.');
-      } catch (err) {
-        console.error('[PushService] FCM auth failed:', err);
+    if (hasNativeSubs) {
+      if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
+        fcmError = 'FIREBASE_SERVICE_ACCOUNT secret is missing in Supabase';
+      } else {
+        try {
+          serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
+          accessToken = await getAccessToken(serviceAccount);
+          console.log('[PushService] FCM access token obtained.');
+        } catch (err: any) {
+          fcmError = `FCM auth failed: ${err.message}`;
+          console.error('[PushService] FCM auth failed:', err);
+        }
       }
     }
 
@@ -236,7 +242,7 @@ serve(async (req) => {
         // Native device (FCM)
         if (sub.device_token) {
           if (!accessToken || !serviceAccount) {
-            return { type: 'fcm', success: false, error: 'FCM not configured' };
+            return { type: 'fcm', success: false, error: fcmError || 'FCM not configured' };
           }
           const result = await sendFcmNotification(serviceAccount, accessToken, sub.device_token, title, body);
           console.log(`[PushService] FCM → ${result.success ? '✅' : '❌ ' + result.error}`);
