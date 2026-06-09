@@ -40,3 +40,7 @@ This file maintains the current structural and functional state of the TaskFlow 
 * Implementation of employee editing (email, password, role, name) and employee deletion inside Manager Dashboard.
 * Full integration with Deno Edge function.
 * Native Capacitor synchronization and Vite build checks complete.
+* Added geolocation accuracy metadata (`approximate` warning banner) to warn users when location is cached/imprecise.
+* Enforced password length validation (minimum 6 characters) on client-side.
+* Fixed Mobile Header notch overlap in SuperAdminDashboard using `safe-pt`.
+* Implemented profile email modification in ProfileSettings.tsx with pending confirmation UI notice.
