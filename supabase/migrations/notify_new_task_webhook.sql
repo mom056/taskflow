@@ -15,29 +15,10 @@ SET search_path = public, extensions, net
 AS $$
 DECLARE
   payload JSONB;
-  edge_url TEXT;
-  svc_key TEXT;
+  -- The Supabase project URL is public (same as VITE_SUPABASE_URL in .env).
+  -- The Edge Function is deployed with --no-verify-jwt, so no auth header is needed.
+  edge_url CONSTANT TEXT := 'https://bzsmwmkgmropuadpkcku.supabase.co/functions/v1/send-push';
 BEGIN
-  -- Build URL from Supabase project URL (auto-set by Supabase in all projects)
-  edge_url := rtrim(current_setting('app.settings.supabase_url', true), '/') || '/functions/v1/send-push';
-
-  -- Retrieve the service_role_key from Supabase Vault (secure, never hardcoded)
-  SELECT decrypted_secret INTO svc_key
-    FROM vault.decrypted_secrets
-    WHERE name = 'service_role_key'
-    LIMIT 1;
-
-  -- Fallback: if vault is not set up, try app.settings
-  IF svc_key IS NULL OR svc_key = '' THEN
-    svc_key := current_setting('app.settings.service_role_key', true);
-  END IF;
-
-  -- If we still don't have a key, use the function without auth
-  -- (works because send-push is deployed with --no-verify-jwt)
-  IF svc_key IS NULL THEN
-    svc_key := '';
-  END IF;
-
   -- Build the webhook payload matching our Edge Function's expected format
   payload := jsonb_build_object(
     'type', 'INSERT',
@@ -54,13 +35,11 @@ BEGIN
   );
 
   -- Send async HTTP POST to the Edge Function via pg_net
+  -- No Authorization header needed (function deployed with --no-verify-jwt)
   PERFORM net.http_post(
     url := edge_url,
     body := payload,
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || svc_key
-    )
+    headers := '{"Content-Type": "application/json"}'::jsonb
   );
 
   RETURN NEW;
