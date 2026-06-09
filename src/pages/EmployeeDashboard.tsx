@@ -117,40 +117,65 @@ export default function EmployeeDashboard() {
     let longitude = null;
     let locationVerifiedAt = null;
 
-    if (newStatus === 'completed') {
-      const toastId = toast.loading('جاري تحديد موقعك الجغرافي للتحقق من إتمام المهمة ميدانياً...');
+    const isStart = newStatus === 'in_progress';
+    const isComplete = newStatus === 'completed';
+
+    if (isStart || isComplete) {
+      const toastId = toast.loading(isStart 
+        ? 'جاري تحديد موقعك الجغرافي لتوثيق بدء العمل على المهمة...' 
+        : 'جاري تحديد موقعك الجغرافي للتحقق من إتمام المهمة ميدانياً...'
+      );
       try {
         const coords = await getCoordinates();
         latitude = coords.latitude;
         longitude = coords.longitude;
         locationVerifiedAt = Date.now();
-        toast.success('تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓', { id: toastId });
+        toast.success(isStart 
+          ? 'تم توثيق موقع بدء العمل بنجاح ✓' 
+          : 'تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓', 
+          { id: toastId }
+        );
       } catch (err: any) {
-        toast.error(err.message || 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لإكمال المهمة.', { id: toastId });
-        return; // Block completion if GPS coordinate capture fails
+        toast.error(err.message || 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.', { id: toastId });
+        return; // Block status change if GPS coordinate capture fails
       }
     }
 
+    const payload: any = { status: newStatus };
+    if (isStart) {
+      payload.start_latitude = latitude;
+      payload.start_longitude = longitude;
+      payload.start_location_verified_at = locationVerifiedAt;
+    } else if (isComplete) {
+      payload.latitude = latitude;
+      payload.longitude = longitude;
+      payload.location_verified_at = locationVerifiedAt;
+    }
+
     if (!isOnline || isTempTask) {
-      addToQueue('update_status', { 
-        status: newStatus,
-        latitude,
-        longitude,
-        location_verified_at: locationVerifiedAt
-      }, taskId);
+      addToQueue('update_status', payload, taskId);
       return;
     }
 
     try {
+      const dbUpdatePayload: any = { 
+        status: newStatus, 
+        updated_at: Date.now()
+      };
+      
+      if (isStart) {
+        dbUpdatePayload.start_latitude = latitude;
+        dbUpdatePayload.start_longitude = longitude;
+        dbUpdatePayload.start_location_verified_at = locationVerifiedAt;
+      } else if (isComplete) {
+        dbUpdatePayload.latitude = latitude;
+        dbUpdatePayload.longitude = longitude;
+        dbUpdatePayload.location_verified_at = locationVerifiedAt;
+      }
+
       const { data, error } = await supabase
         .from('tasks')
-        .update({ 
-          status: newStatus, 
-          updated_at: Date.now(),
-          latitude,
-          longitude,
-          location_verified_at: locationVerifiedAt
-        })
+        .update(dbUpdatePayload)
         .eq('id', taskId)
         .select();
       if (error) throw error;
@@ -159,7 +184,7 @@ export default function EmployeeDashboard() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
-      toast.success('تم تحديث حالة المهمة وتوثيق موقعك الجغرافي');
+      toast.success(isStart ? 'تم بدء العمل على المهمة وتوثيق موقعك' : 'تم إتمام المهمة وتوثيق موقعك');
     } catch (err: any) {
       console.error('[Task Update]', err);
       toast.error(`خطأ: ${err.message || 'تعذر تحديث الحالة'}`);

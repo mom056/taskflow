@@ -38,6 +38,9 @@ export interface Task {
   latitude?: number;
   longitude?: number;
   locationVerifiedAt?: number;
+  startLatitude?: number;
+  startLongitude?: number;
+  startLocationVerifiedAt?: number;
 }
 
 export interface Visit {

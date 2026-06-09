@@ -20,10 +20,10 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
   const markersRef = useRef<any[]>([]);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
 
-  // Filter tasks with valid GPS coordinates
+  // Filter tasks with valid GPS coordinates (either start or end)
   const geoTasks = tasks.filter(
-    (t) => t.latitude !== undefined && t.latitude !== null && 
-           t.longitude !== undefined && t.longitude !== null
+    (t) => (t.latitude !== undefined && t.latitude !== null && t.longitude !== undefined && t.longitude !== null) ||
+           (t.startLatitude !== undefined && t.startLatitude !== null && t.startLongitude !== undefined && t.startLongitude !== null)
   );
 
   // Load Leaflet JS & CSS dynamically
@@ -70,9 +70,13 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
       let zoom = 6;
 
       if (geoTasks.length > 0) {
-        const sumLat = geoTasks.reduce((acc, t) => acc + Number(t.latitude), 0);
-        const sumLng = geoTasks.reduce((acc, t) => acc + Number(t.longitude), 0);
-        center = [sumLat / geoTasks.length, sumLng / geoTasks.length];
+        // Use coordinates of the first valid location found
+        const firstWithCoords = geoTasks.find(t => t.latitude || t.startLatitude);
+        if (firstWithCoords) {
+          const lat = Number(firstWithCoords.latitude || firstWithCoords.startLatitude);
+          const lng = Number(firstWithCoords.longitude || firstWithCoords.startLongitude);
+          center = [lat, lng];
+        }
         zoom = geoTasks.length === 1 ? 13 : 10;
       }
 
@@ -90,49 +94,80 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
 
     // Add markers
     geoTasks.forEach((task) => {
-      const lat = Number(task.latitude);
-      const lng = Number(task.longitude);
       const empName = getEmployeeName(task.employeeId);
-      
-      const statusAr = task.status === 'completed' ? 'مكتملة' : 'جاري العمل';
-      const statusColor = task.status === 'completed' ? '#10b981' : '#f59e0b';
+      window.openExternalUrl = openExternalUrl;
 
-          window.openExternalUrl = openExternalUrl;
-
-          const popupHtml = `
-            <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
-              <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: bold; color: #1e293b;">${task.title}</h4>
-              <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">الموظف: <b>${empName}</b></p>
-              
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-                <span style="display: inline-block; width: 8px; height: 8px; background-color: ${statusColor}; border-radius: 50%;"></span>
-                <span style="font-size: 11px; font-weight: bold; color: ${statusColor};">${statusAr}</span>
-              </div>
-
-              ${task.imageUrl ? `
-                <div style="margin-bottom: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
-                  <img src="${task.imageUrl}" style="width: 100%; height: 80px; object-cover: cover; display: block;" />
-                </div>
-              ` : ''}
-
-              ${task.notes ? `
-                <p style="margin: 0 0 8px 0; font-size: 11px; color: #475569; background: #f8fafc; padding: 6px; border-radius: 6px; border: 1px solid #f1f5f9;">
-                  ${task.notes}
-                </p>
-              ` : ''}
-
-              <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${lat},${lng}'); return false;" 
-                 style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
-                فتح في خرائط Google ↗
-              </a>
+      // 1. If start location is present, add start marker
+      if (task.startLatitude && task.startLongitude) {
+        const startLat = Number(task.startLatitude);
+        const startLng = Number(task.startLongitude);
+        
+        const popupHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
+            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${task.title} (موقع البدء)</h4>
+            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">الموظف: <b>${empName}</b></p>
+            
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+              <span style="display: inline-block; width: 8px; height: 8px; background-color: #2563eb; border-radius: 50%;"></span>
+              <span style="font-size: 11px; font-weight: bold; color: #2563eb;">بدء العمل على المهمة</span>
             </div>
-          `;
 
-          const marker = window.L.marker([lat, lng])
-            .addTo(mapRef.current)
-            .bindPopup(popupHtml);
+            ${task.startLocationVerifiedAt ? `
+              <p style="margin: 0 0 8px 0; font-size: 10px; color: #64748b;">الوقت: ${new Date(task.startLocationVerifiedAt).toLocaleTimeString('ar-SA')}</p>
+            ` : ''}
 
-      markersRef.current.push(marker);
+            <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${startLat},${startLng}'); return false;" 
+               style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
+              فتح موقع البدء ↗
+            </a>
+          </div>
+        `;
+
+        const startMarker = window.L.marker([startLat, startLng])
+          .addTo(mapRef.current)
+          .bindPopup(popupHtml);
+        markersRef.current.push(startMarker);
+      }
+
+      // 2. If completion location is present, add completion marker
+      if (task.latitude && task.longitude) {
+        const compLat = Number(task.latitude);
+        const compLng = Number(task.longitude);
+        
+        const popupHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
+            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${task.title} (موقع الإتمام)</h4>
+            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">الموظف: <b>${empName}</b></p>
+            
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+              <span style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;"></span>
+              <span style="font-size: 11px; font-weight: bold; color: #10b981;">إتمام المهمة</span>
+            </div>
+
+            ${task.imageUrl ? `
+              <div style="margin-bottom: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+                <img src="${task.imageUrl}" style="width: 100%; height: 80px; object-fit: cover; display: block;" />
+              </div>
+            ` : ''}
+
+            ${task.notes ? `
+              <p style="margin: 0 0 8px 0; font-size: 11px; color: #475569; background: #f8fafc; padding: 6px; border-radius: 6px; border: 1px solid #f1f5f9;">
+                ${task.notes}
+              </p>
+            ` : ''}
+
+            <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${compLat},${compLng}'); return false;" 
+               style="display: block; text-align: center; background: #10b981; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
+              فتح موقع الإتمام ↗
+            </a>
+          </div>
+        `;
+
+        const compMarker = window.L.marker([compLat, compLng])
+          .addTo(mapRef.current)
+          .bindPopup(popupHtml);
+        markersRef.current.push(compMarker);
+      }
     });
 
   }, [leafletLoaded, geoTasks.length]);

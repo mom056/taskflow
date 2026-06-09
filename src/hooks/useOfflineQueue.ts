@@ -64,15 +64,22 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
           const { error } = await supabase.from('tasks').insert([item.payload]);
           if (error) throw error;
         } else if (item.type === 'update_status') {
+          const updatePayload: any = {
+            status: item.payload.status,
+            updated_at: Date.now()
+          };
+          
+          if (item.payload.latitude !== undefined) updatePayload.latitude = item.payload.latitude;
+          if (item.payload.longitude !== undefined) updatePayload.longitude = item.payload.longitude;
+          if (item.payload.location_verified_at !== undefined) updatePayload.location_verified_at = item.payload.location_verified_at;
+          
+          if (item.payload.start_latitude !== undefined) updatePayload.start_latitude = item.payload.start_latitude;
+          if (item.payload.start_longitude !== undefined) updatePayload.start_longitude = item.payload.start_longitude;
+          if (item.payload.start_location_verified_at !== undefined) updatePayload.start_location_verified_at = item.payload.start_location_verified_at;
+
           const { error } = await supabase
             .from('tasks')
-            .update({ 
-              status: item.payload.status, 
-              latitude: item.payload.latitude,
-              longitude: item.payload.longitude,
-              location_verified_at: item.payload.location_verified_at,
-              updated_at: Date.now() 
-            })
+            .update(updatePayload)
             .eq('id', item.taskId);
           if (error) throw error;
         } else if (item.type === 'update_notes') {

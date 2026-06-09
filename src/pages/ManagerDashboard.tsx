@@ -582,16 +582,21 @@ export default function ManagerDashboard() {
                   ) : (
                     tasks.filter(t => t.location).length > 0 ? (
                       tasks.filter(t => t.location).map(task => (
-                        <div key={task.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2">
+                        <div key={task.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2.5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
                               <h3 className="font-semibold text-slate-900 text-sm">{task.title}</h3>
                               <p className="text-xs text-slate-400 mt-0.5">{getEmployeeName(task.employeeId)}</p>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                              {task.startLatitude && (
+                                <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
+                                  بدء موثق
+                                </span>
+                              )}
                               {task.latitude && (
                                 <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">
-                                  GPS موثق
+                                  إتمام موثق
                                 </span>
                               )}
                               <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
@@ -602,6 +607,24 @@ export default function ManagerDashboard() {
                           <div className="flex items-center gap-1 text-xs text-slate-600">
                             <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                             <span>{task.location}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 pt-0.5">
+                            {task.startLatitude && task.startLongitude && (
+                              <button
+                                onClick={() => openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${task.startLatitude},${task.startLongitude}`)}
+                                className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-semibold border-none cursor-pointer flex items-center gap-1 transition-colors"
+                              >
+                                📌 موقع البدء (GPS)
+                              </button>
+                            )}
+                            {task.latitude && task.longitude && (
+                              <button
+                                onClick={() => openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${task.latitude},${task.longitude}`)}
+                                className="px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-[11px] font-semibold border-none cursor-pointer flex items-center gap-1 transition-colors"
+                              >
+                                📍 موقع الإتمام (GPS)
+                              </button>
+                            )}
                           </div>
                           {task.notes && (
                             <p className="text-xs text-slate-500 bg-white rounded-lg px-3 py-2 border border-slate-100">{task.notes}</p>
