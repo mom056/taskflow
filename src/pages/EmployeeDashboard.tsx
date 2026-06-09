@@ -498,23 +498,23 @@ export default function EmployeeDashboard() {
                       <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-2">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">تغيير الحالة</p>
                         <div className="flex gap-2 flex-wrap">
-                          {task.status !== 'in_progress' && (
+                          {(task.status === 'new' || task.status === 'pending') && (
                             <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
                               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-all">
                               <RefreshCcw className="w-3.5 h-3.5" />بدء العمل
                             </button>
                           )}
-                          {task.status !== 'completed' && (
-                            <button onClick={() => handleUpdateStatus(task.id, 'completed')}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-all">
-                              <CheckCircle className="w-3.5 h-3.5" />اكتمل
-                            </button>
-                          )}
-                          {task.status !== 'pending' && (
-                            <button onClick={() => handleUpdateStatus(task.id, 'pending')}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-all">
-                              <Hand className="w-3.5 h-3.5" />تعليق
-                            </button>
+                          {task.status === 'in_progress' && (
+                            <>
+                              <button onClick={() => handleUpdateStatus(task.id, 'completed')}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-all">
+                                <CheckCircle className="w-3.5 h-3.5" />اكتمل
+                              </button>
+                              <button onClick={() => handleUpdateStatus(task.id, 'pending')}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-all">
+                                <Hand className="w-3.5 h-3.5" />تعليق
+                              </button>
+                            </>
                           )}
                           <button onClick={() => openNotesModal(task)}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all ml-auto">
