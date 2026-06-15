@@ -8,12 +8,26 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 // Initialize Supabase admin client with service role key
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '';
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "capacitor://localhost",
+    "ionic://localhost",
+  ];
+  
+  const isAllowed = allowedOrigins.includes(origin) || origin.startsWith('http://localhost:');
+  
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -69,6 +83,21 @@ serve(async (req) => {
       const { email, password, name, role } = body;
       if (!email || !password || !name || !role) {
         return new Response(JSON.stringify({ error: 'Name, email, password, and role are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return new Response(JSON.stringify({ error: 'Invalid email format' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (password.length < 6) {
+        return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -194,6 +223,23 @@ serve(async (req) => {
       if (targetUser.role === 'super_admin' && callerProfile.role !== 'super_admin') {
         return new Response(JSON.stringify({ error: 'Access denied: Cannot edit super admin' }), {
           status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+          return new Response(JSON.stringify({ error: 'Invalid email format' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      if (password && password.length < 6) {
+        return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }

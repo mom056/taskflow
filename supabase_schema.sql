@@ -137,6 +137,29 @@ CREATE TRIGGER check_user_update_trigger
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.check_user_update();
 
+-- Enforce subscription max_employees limits on users table for 'employee' role
+CREATE OR REPLACE FUNCTION public.check_employee_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  current_count INT;
+  max_allowed INT;
+BEGIN
+  IF NEW.role = 'employee' THEN
+    SELECT max_employees INTO max_allowed FROM public.companies WHERE id = NEW.company_id;
+    SELECT COUNT(*) INTO current_count FROM public.users WHERE company_id = NEW.company_id AND role = 'employee';
+    IF current_count >= max_allowed THEN
+      RAISE EXCEPTION 'تم تجاوز الحد الأقصى للموظفين المسموح به لهذه الشركة (% موظف).', max_allowed;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS check_employee_limit_trigger ON public.users;
+CREATE TRIGGER check_employee_limit_trigger
+  BEFORE INSERT ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.check_employee_limit();
+
 -- Prevent non-super-admins from changing subscription plans, employee limits, active status, name, or slug on companies table
 CREATE OR REPLACE FUNCTION public.check_company_update()
 RETURNS TRIGGER AS $$
@@ -366,3 +389,34 @@ ALTER TABLE public.push_subscriptions ALTER COLUMN endpoint DROP NOT NULL;
 ALTER TABLE public.push_subscriptions ALTER COLUMN p256dh DROP NOT NULL;
 ALTER TABLE public.push_subscriptions ALTER COLUMN auth DROP NOT NULL;
 ALTER TABLE public.push_subscriptions ADD COLUMN IF NOT EXISTS device_token TEXT UNIQUE;
+
+-- ── ACTIVITY LOG TABLE & POLICIES ─────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.activity_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  actor_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,           -- 'task_created', 'task_completed', 'employee_added', 'company_suspended', etc.
+  target_type TEXT,               -- 'task', 'user', 'company'
+  target_id TEXT,                 -- ID of the affected entity
+  metadata JSONB DEFAULT '{}',    -- Additional context (old values, new values, etc.)
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
+
+ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "activity_log_select_policy" ON public.activity_log;
+CREATE POLICY "activity_log_select_policy" ON public.activity_log
+  FOR SELECT
+  TO authenticated
+  USING (
+    company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "activity_log_insert_policy" ON public.activity_log;
+CREATE POLICY "activity_log_insert_policy" ON public.activity_log
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+  );

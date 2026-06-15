@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Company } from '../types';
+import { Company, mapCompanyFromDB } from '../types';
 import toast from 'react-hot-toast';
 
 type Role = 'manager' | 'employee' | 'super_admin' | null;
@@ -40,7 +40,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
     return { 
       profile: profileData as UserProfile, 
       role: data.role as Role, 
-      company: company as Company 
+      company: company ? mapCompanyFromDB(company) : null 
     };
   }
 
@@ -94,10 +94,10 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
       
       if (compErr) throw compErr;
       companyId = defaultCompany.id;
-      companyData = defaultCompany as Company;
+      companyData = defaultCompany ? mapCompanyFromDB(defaultCompany) : null;
     } else {
       companyId = existingCompanies[0].id;
-      companyData = existingCompanies[0] as Company;
+      companyData = existingCompanies[0] ? mapCompanyFromDB(existingCompanies[0]) : null;
     }
   } else {
     // Create new company for the manager
@@ -119,7 +119,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
       throw new Error('Failed to create company: ' + compErr.message);
     }
     companyId = newCompany.id;
-    companyData = newCompany as Company;
+    companyData = newCompany ? mapCompanyFromDB(newCompany) : null;
   }
 
   const newProfile: UserProfile = {
@@ -149,7 +149,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
       return { 
         profile: profileData as UserProfile, 
         role: retry.role as Role, 
-        company: company as Company 
+        company: company ? mapCompanyFromDB(company) : null 
       };
     }
     throw new Error('Failed to create or fetch user profile: ' + upsertErr.message);
@@ -194,8 +194,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTimeout(async () => {
           try {
             const result = await fetchOrCreateProfile(sessionUser);
-            const companyRecord = result.company as any;
-            if (companyRecord && companyRecord.is_active === false && result.role !== 'super_admin') {
+            const companyRecord = result.company;
+            if (companyRecord && companyRecord.isActive === false && result.role !== 'super_admin') {
               throw new Error('company_suspended');
             }
             if (isMountedRef.current) {

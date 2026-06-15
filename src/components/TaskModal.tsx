@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase';
 import { Task, TaskStatus, User } from '../types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { useActivityLog } from '../hooks/useActivityLog';
 import toast from 'react-hot-toast';
+import { useTranslation } from '../contexts/LanguageContext';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -15,6 +17,8 @@ interface TaskModalProps {
 
 export default function TaskModal({ isOpen, onClose, task, employees, currentUserId }: TaskModalProps) {
   const { profile } = useAuth();
+  const { logActivity } = useActivityLog();
+  const { t, language } = useTranslation();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -74,10 +78,11 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
           .eq('id', task.id);
           
         if (error) throw error;
-        toast.success('تم تعديل المهمة بنجاح');
+        logActivity('task_updated', 'task', task.id, { title: formData.title });
+        toast.success(language === 'ar' ? 'تم تعديل المهمة بنجاح' : 'Task updated successfully');
       } else {
         // Create new task
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('tasks')
           .insert([{
             title: formData.title,
@@ -90,10 +95,13 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
             company_id: profile?.company_id,
             created_at: Date.now(),
             updated_at: Date.now()
-          }]);
+          }])
+          .select('id')
+          .single();
           
         if (error) throw error;
-        toast.success('تمت إضافة المهمة بنجاح');
+        logActivity('task_created', 'task', data?.id, { title: formData.title });
+        toast.success(language === 'ar' ? 'تمت إضافة المهمة بنجاح' : 'Task created successfully');
       }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       onClose();
@@ -101,8 +109,8 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
       console.error('[TaskModal] Error:', error);
       const isPermissionError = error?.code === '42501' || error?.message?.includes('policy');
       toast.error(isPermissionError
-        ? 'ليس لديك صلاحية لهذا الإجراء'
-        : 'حدث خطأ غير متوقع، يرجى المحاولة مجدداً'
+        ? (language === 'ar' ? 'ليس لديك صلاحية لهذا الإجراء' : 'Permission denied')
+        : (language === 'ar' ? 'حدث خطأ غير متوقع، يرجى المحاولة مجدداً' : 'An error occurred, please try again')
       );
     } finally {
       setIsSubmitting(false);
@@ -110,20 +118,24 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" dir="rtl">
+    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" aria-hidden="true" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" aria-hidden="true" onClick={onClose}></div>
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100">
+        <div className={`relative z-10 inline-block align-bottom bg-white rounded-2xl ${language === 'ar' ? 'text-right' : 'text-left'} overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100`}>
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
               <h3 className="text-xl font-bold text-slate-900 mb-6" id="modal-title">
-                {task ? 'تعديل المهمة' : 'إنشاء مهمة جديدة'}
+                {task 
+                  ? (language === 'ar' ? 'تعديل المهمة' : 'Edit Task') 
+                  : (language === 'ar' ? 'إنشاء مهمة جديدة' : 'Create New Task')}
               </h3>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">عنوان المهمة</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    {language === 'ar' ? 'عنوان المهمة' : 'Task Title'}
+                  </label>
                   <input 
                     required
                     type="text" 
@@ -134,7 +146,9 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">وصف المهمة (اختياري)</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    {language === 'ar' ? 'وصف المهمة (اختياري)' : 'Task Description (Optional)'}
+                  </label>
                   <textarea 
                     value={formData.description}
                     onChange={e => setFormData({...formData, description: e.target.value})}
@@ -145,7 +159,9 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">تاريخ التنفيذ</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      {language === 'ar' ? 'تاريخ التنفيذ' : 'Due Date'}
+                    </label>
                     <input 
                       type="date" 
                       value={formData.dueDate}
@@ -154,7 +170,9 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">اسم العميل أو المكان</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      {language === 'ar' ? 'اسم العميل أو المكان' : 'Client / Location'}
+                    </label>
                     <input 
                       type="text" 
                       value={formData.location}
@@ -166,14 +184,16 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">الموظف المسؤول</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      {language === 'ar' ? 'الموظف المسؤول' : 'Assigned Employee'}
+                    </label>
                     <select
                       required
                       value={formData.employeeId}
                       onChange={e => setFormData({...formData, employeeId: e.target.value})}
                       className="w-full border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border outline-none transition bg-white"
                     >
-                      <option value="">-- اختر موظف --</option>
+                      <option value="">{language === 'ar' ? '-- اختر موظف --' : '-- Choose Employee --'}</option>
                       {employees.map(emp => (
                         <option key={emp.id} value={emp.id}>{emp.name}</option>
                       ))}
@@ -182,29 +202,33 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
                   
                   {task && (
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">حالة المهمة</label>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                        {language === 'ar' ? 'حالة المهمة' : 'Task Status'}
+                      </label>
                       <select
                         required
                         value={formData.status}
                         onChange={e => setFormData({...formData, status: e.target.value as TaskStatus})}
                         className="w-full border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border outline-none transition bg-white"
                       >
-                        <option value="new">جديدة</option>
-                        <option value="in_progress">جاري العمل</option>
-                        <option value="completed">مكتملة</option>
-                        <option value="pending">معلقة</option>
+                        <option value="new">{language === 'ar' ? 'جديدة' : 'New'}</option>
+                        <option value="in_progress">{language === 'ar' ? 'جاري العمل' : 'In Progress'}</option>
+                        <option value="completed">{language === 'ar' ? 'مكتملة' : 'Completed'}</option>
+                        <option value="pending">{language === 'ar' ? 'معلقة' : 'Pending'}</option>
                       </select>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-            <div className="bg-slate-50 px-4 py-4 sm:px-6 sm:flex sm:flex-row-reverse border-t border-slate-100 gap-3">
-              <button disabled={isSubmitting} type="submit" className="w-full inline-flex justify-center rounded-xl border border-transparent px-6 py-2.5 bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none sm:w-auto disabled:opacity-50">
-                {isSubmitting ? 'جاري الحفظ...' : 'حفظ المهمة'}
+            <div className={`bg-slate-50 px-4 py-4 sm:px-6 sm:flex ${language === 'ar' ? 'sm:flex-row-reverse' : 'sm:flex-row'} border-t border-slate-100 gap-3`}>
+              <button disabled={isSubmitting} type="submit" className="w-full inline-flex justify-center rounded-xl border border-transparent px-6 py-2.5 bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none sm:w-auto disabled:opacity-50 border-none cursor-pointer">
+                {isSubmitting 
+                  ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') 
+                  : (language === 'ar' ? 'حفظ المهمة' : 'Save Task')}
               </button>
-              <button disabled={isSubmitting} type="button" onClick={onClose} className="mt-3 w-full inline-flex justify-center rounded-xl border border-slate-300 shadow-sm px-6 py-2.5 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none sm:mt-0 sm:w-auto disabled:opacity-50">
-                إلغاء
+              <button disabled={isSubmitting} type="button" onClick={onClose} className="mt-3 sm:mt-0 w-full inline-flex justify-center rounded-xl border border-slate-300 shadow-sm px-6 py-2.5 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none sm:w-auto disabled:opacity-50 cursor-pointer">
+                {t.common.cancel}
               </button>
             </div>
           </form>

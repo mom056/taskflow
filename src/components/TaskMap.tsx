@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Task } from '../types';
 import { openExternalUrl } from '../lib/nativeServices';
+import { useTranslation } from '../contexts/LanguageContext';
 
 interface TaskMapProps {
   tasks: Task[];
-  getEmployeeName: (id: string) => string;
+  getEmployeeName: (id: string | null) => string;
 }
 
 declare global {
@@ -15,6 +16,7 @@ declare global {
 }
 
 export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
+  const { language } = useTranslation();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -102,23 +104,31 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
         const startLat = Number(task.startLatitude);
         const startLng = Number(task.startLongitude);
         
+        const labelTitle = language === 'ar' ? `${task.title} (موقع البدء)` : `${task.title} (Start Location)`;
+        const labelEmp = language === 'ar' ? `الموظف: <b>${empName}</b>` : `Employee: <b>${empName}</b>`;
+        const labelStart = language === 'ar' ? 'بدء العمل على المهمة' : 'Work started on task';
+        const labelTime = language === 'ar' 
+          ? `الوقت: ${new Date(task.startLocationVerifiedAt!).toLocaleTimeString('ar-SA')}`
+          : `Time: ${new Date(task.startLocationVerifiedAt!).toLocaleTimeString('en-US')}`;
+        const labelButton = language === 'ar' ? 'فتح موقع البدء ↗' : 'Open Start Location ↗';
+
         const popupHtml = `
-          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
-            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${task.title} (موقع البدء)</h4>
-            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">الموظف: <b>${empName}</b></p>
+          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: ${language === 'ar' ? 'right' : 'left'}; direction: ${language === 'ar' ? 'rtl' : 'ltr'}; min-width: 200px;">
+            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${labelTitle}</h4>
+            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">${labelEmp}</p>
             
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
               <span style="display: inline-block; width: 8px; height: 8px; background-color: #2563eb; border-radius: 50%;"></span>
-              <span style="font-size: 11px; font-weight: bold; color: #2563eb;">بدء العمل على المهمة</span>
+              <span style="font-size: 11px; font-weight: bold; color: #2563eb;">${labelStart}</span>
             </div>
 
             ${task.startLocationVerifiedAt ? `
-              <p style="margin: 0 0 8px 0; font-size: 10px; color: #64748b;">الوقت: ${new Date(task.startLocationVerifiedAt).toLocaleTimeString('ar-SA')}</p>
+              <p style="margin: 0 0 8px 0; font-size: 10px; color: #64748b;">${labelTime}</p>
             ` : ''}
 
             <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${startLat},${startLng}'); return false;" 
                style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
-              فتح موقع البدء ↗
+              ${labelButton}
             </a>
           </div>
         `;
@@ -134,14 +144,19 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
         const compLat = Number(task.latitude);
         const compLng = Number(task.longitude);
         
+        const labelTitle = language === 'ar' ? `${task.title} (موقع الإتمام)` : `${task.title} (Completion Location)`;
+        const labelEmp = language === 'ar' ? `الموظف: <b>${empName}</b>` : `Employee: <b>${empName}</b>`;
+        const labelDone = language === 'ar' ? 'إتمام المهمة' : 'Task Completed';
+        const labelButton = language === 'ar' ? 'فتح موقع الإتمام ↗' : 'Open Completion Location ↗';
+
         const popupHtml = `
-          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: right; direction: rtl; min-width: 200px;">
-            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${task.title} (موقع الإتمام)</h4>
-            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">الموظف: <b>${empName}</b></p>
+          <div style="font-family: system-ui, -apple-system, sans-serif; text-align: ${language === 'ar' ? 'right' : 'left'}; direction: ${language === 'ar' ? 'rtl' : 'ltr'}; min-width: 200px;">
+            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e293b;">${labelTitle}</h4>
+            <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">${labelEmp}</p>
             
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
               <span style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;"></span>
-              <span style="font-size: 11px; font-weight: bold; color: #10b981;">إتمام المهمة</span>
+              <span style="font-size: 11px; font-weight: bold; color: #10b981;">${labelDone}</span>
             </div>
 
             ${task.imageUrl ? `
@@ -158,7 +173,7 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
 
             <a href="#" onclick="window.openExternalUrl('https://www.google.com/maps/search/?api=1&query=${compLat},${compLng}'); return false;" 
                style="display: block; text-align: center; background: #10b981; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; text-decoration: none; transition: background 0.2s;">
-              فتح موقع الإتمام ↗
+              ${labelButton}
             </a>
           </div>
         `;
@@ -170,21 +185,29 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
       }
     });
 
-  }, [leafletLoaded, geoTasks.length]);
+  }, [leafletLoaded, geoTasks.length, language]);
 
   return (
     <div className="relative w-full h-[500px] bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-inner">
       {!leafletLoaded && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 gap-3 z-10">
           <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-          <span className="text-sm font-semibold text-slate-500">جاري تحميل خريطة الزيارات الميدانية...</span>
+          <span className="text-sm font-semibold text-slate-500">
+            {language === 'ar' ? 'جاري تحميل خريطة الزيارات الميدانية...' : 'Loading field visits map...'}
+          </span>
         </div>
       )}
       {leafletLoaded && geoTasks.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 p-6 text-center z-10">
           <MapPin className="w-12 h-12 text-slate-300 mb-3" />
-          <p className="text-slate-500 text-sm font-semibold">لا تتوفر إحداثيات GPS مسجلة لأي مهمة حتى الآن</p>
-          <p className="text-slate-400 text-xs mt-1">تأكد من إتمام الموظفين للمهام من هواتفهم وتفعيل الـ GPS</p>
+          <p className="text-slate-500 text-sm font-semibold">
+            {language === 'ar' ? 'لا تتوفر إحداثيات GPS مسجلة لأي مهمة حتى الآن' : 'No GPS coordinates registered for any tasks yet'}
+          </p>
+          <p className="text-slate-400 text-xs mt-1">
+            {language === 'ar' 
+              ? 'تأكت من إتمام الموظفين للمهام من هواتفهم وتفعيل الـ GPS'
+              : 'Ensure employees complete tasks from their phones with GPS enabled'}
+          </p>
         </div>
       )}
       <div ref={mapContainerRef} className="w-full h-full z-0" />

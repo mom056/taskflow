@@ -1,5 +1,5 @@
 -- ============================================================
--- Database Webhook: Notify employee when a new task is created
+-- Database Webhook: Notify user when task is created or updated
 -- This trigger calls the send-push Edge Function via pg_net
 -- ============================================================
 
@@ -21,7 +21,7 @@ DECLARE
 BEGIN
   -- Build the webhook payload matching our Edge Function's expected format
   payload := jsonb_build_object(
-    'type', 'INSERT',
+    'type', TG_OP,
     'table', 'tasks',
     'schema', 'public',
     'record', jsonb_build_object(
@@ -30,8 +30,15 @@ BEGIN
       'description', NEW.description,
       'employee_id', NEW.employee_id,
       'status', NEW.status,
-      'location', NEW.location
-    )
+      'location', NEW.location,
+      'created_by', NEW.created_by
+    ),
+    'old_record', CASE 
+      WHEN TG_OP = 'UPDATE' THEN jsonb_build_object(
+        'status', OLD.status
+      )
+      ELSE NULL
+    END
   );
 
   -- Send async HTTP POST to the Edge Function via pg_net
@@ -45,7 +52,7 @@ BEGIN
   RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
-    -- Never block task creation if notification fails
+    -- Never block task creation/update if notification fails
     RAISE WARNING '[notify_new_task] Push notification failed: %', SQLERRM;
     RETURN NEW;
 END;
@@ -54,6 +61,7 @@ $$;
 -- 3. Create the trigger on the tasks table
 DROP TRIGGER IF EXISTS on_task_created_notify ON public.tasks;
 CREATE TRIGGER on_task_created_notify
-  AFTER INSERT ON public.tasks
+  AFTER INSERT OR UPDATE ON public.tasks
   FOR EACH ROW
   EXECUTE FUNCTION public.notify_new_task();
+

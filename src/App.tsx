@@ -2,11 +2,13 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLoc
 import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import ManagerDashboard from './pages/ManagerDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import ProfileSettings from './pages/ProfileSettings';
+import LandingPage from './pages/LandingPage';
 import { Toaster } from 'react-hot-toast';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -93,6 +95,7 @@ function App() {
           <Toaster position="top-center" toastOptions={{ style: { fontFamily: 'inherit' } }} />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route path="/manager/*" element={
               <ProtectedRoute allowedRole="manager">
@@ -141,7 +144,10 @@ function RootRedirect() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    if (Capacitor.isNativePlatform()) {
+      return <Navigate to="/login" replace />;
+    }
+    return <LandingPage />;
   }
 
   if (!userRole) {

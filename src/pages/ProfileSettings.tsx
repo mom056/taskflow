@@ -5,10 +5,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { ArrowRight, Camera, Save, Lock, UserPlus, Shield, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import imageCompression from 'browser-image-compression';
+import { useTranslation } from '../contexts/LanguageContext';
+import { useActivityLog } from '../hooks/useActivityLog';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const { user, profile, refreshRole, company } = useAuth();
+  const { logActivity } = useActivityLog();
+  const { t, language, changeLanguage } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile fields
@@ -20,7 +24,10 @@ export default function ProfileSettings() {
 
   // Company Settings fields
   const [companyName, setCompanyName] = useState(company?.name || '');
+  const [logoUrl, setLogoUrl] = useState(company?.logoUrl || '');
   const [isUpdatingCompany, setUpdatingCompany] = useState(false);
+  const [isUploadingLogo, setUploadingLogo] = useState(false);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state with auth context values once loaded
   useEffect(() => {
@@ -28,6 +35,7 @@ export default function ProfileSettings() {
     if (profile?.email || user?.email) setEmail(profile?.email || user?.email || '');
     if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
     if (company?.name) setCompanyName(company.name);
+    if (company?.logoUrl) setLogoUrl(company.logoUrl);
   }, [profile, user, company]);
 
   // Password change fields
@@ -47,8 +55,8 @@ export default function ProfileSettings() {
   // 1. Update Profile (Name & Email)
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return toast.error('الاسم بالكامل مطلوب');
-    if (!email.trim()) return toast.error('البريد الإلكتروني مطلوب');
+    if (!name.trim()) return toast.error(language === 'ar' ? 'الاسم بالكامل مطلوب' : 'Full name is required');
+    if (!email.trim()) return toast.error(language === 'ar' ? 'البريد الإلكتروني مطلوب' : 'Email address is required');
     
     setUpdatingProfile(true);
     try {
@@ -64,14 +72,18 @@ export default function ProfileSettings() {
       if (email.trim().toLowerCase() !== user?.email?.toLowerCase()) {
         const { error: authError } = await supabase.auth.updateUser({ email: email.trim() });
         if (authError) throw authError;
-        toast.success('تم تحديث البيانات. يرجى تأكيد البريد الإلكتروني الجديد عبر الرابط المرسل إليه.');
+        toast.success(
+          language === 'ar' 
+            ? 'تم تحديث البيانات. يرجى تأكيد البريد الإلكتروني الجديد عبر الرابط المرسل إليه.'
+            : 'Profile updated. Please verify your new email address via the link sent to it.'
+        );
       } else {
-        toast.success('تم تحديث الملف الشخصي بنجاح');
+        toast.success(language === 'ar' ? 'تم تحديث الملف الشخصي بنجاح' : 'Profile updated successfully');
       }
       
       await refreshRole();
     } catch (err: any) {
-      toast.error(err.message || 'تعذر تحديث البيانات');
+      toast.error(err.message || (language === 'ar' ? 'تعذر تحديث البيانات' : 'Could not update profile'));
     } finally {
       setUpdatingProfile(false);
     }
@@ -92,7 +104,7 @@ export default function ProfileSettings() {
         fileType: 'image/jpeg',
       };
       
-      toast.loading('جاري معالجة وضغط الصورة...', { id: 'avatar-upload' });
+      toast.loading(language === 'ar' ? 'جاري معالجة وضغط الصورة...' : 'Processing and compressing image...', { id: 'avatar-upload' });
       const compressedFile = await imageCompression(file, options);
 
       const fileExt = 'jpg';
@@ -120,10 +132,10 @@ export default function ProfileSettings() {
       if (dbError) throw dbError;
 
       setAvatarUrl(publicUrl);
-      toast.success('تم تحديث الصورة الشخصية بنجاح', { id: 'avatar-upload' });
+      toast.success(language === 'ar' ? 'تم تحديث الصورة الشخصية بنجاح' : 'Profile picture updated successfully', { id: 'avatar-upload' });
       await refreshRole();
     } catch (err: any) {
-      toast.error(err.message || 'فشل رفع الصورة', { id: 'avatar-upload' });
+      toast.error(err.message || (language === 'ar' ? 'فشل رفع الصورة' : 'Failed to upload image'), { id: 'avatar-upload' });
     } finally {
       setUploadingAvatar(false);
     }
@@ -132,19 +144,19 @@ export default function ProfileSettings() {
   // 3. Update Password
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) return toast.error('كلمة المرور يجب ألا تقل عن 6 أحرف');
-    if (newPassword !== confirmPassword) return toast.error('كلمتا المرور غير متطابقتين');
+    if (newPassword.length < 6) return toast.error(language === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف' : 'Password must be at least 6 characters');
+    if (newPassword !== confirmPassword) return toast.error(language === 'ar' ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
 
     setUpdatingPassword(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
-      toast.success('تم تغيير كلمة المرور بنجاح');
+      toast.success(language === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password updated successfully');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      toast.error(err.message || 'تعذر تغيير كلمة المرور');
+      toast.error(err.message || (language === 'ar' ? 'تعذر تغيير كلمة المرور' : 'Could not change password'));
     } finally {
       setUpdatingPassword(false);
     }
@@ -153,7 +165,7 @@ export default function ProfileSettings() {
   // 3.5. Update Company Name (Manager only)
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyName.trim()) return toast.error('اسم الشركة مطلوب');
+    if (!companyName.trim()) return toast.error(language === 'ar' ? 'اسم الشركة مطلوب' : 'Company name is required');
     if (!company?.id) return;
 
     setUpdatingCompany(true);
@@ -165,12 +177,67 @@ export default function ProfileSettings() {
 
       if (error) throw error;
 
-      toast.success('تم تحديث اسم الشركة بنجاح');
+      logActivity('company_settings_updated', 'company', company.id, { name: companyName.trim() });
+      toast.success(language === 'ar' ? 'تم تحديث اسم الشركة بنجاح' : 'Company name updated successfully');
       await refreshRole();
     } catch (err: any) {
-      toast.error(err.message || 'تعذر تحديث اسم الشركة');
+      toast.error(err.message || (language === 'ar' ? 'تعذر تحديث اسم الشركة' : 'Could not update company name'));
     } finally {
       setUpdatingCompany(false);
+    }
+  };
+
+  // 3.6. Upload Company Logo (Manager only)
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!company?.id) return;
+
+    setUploadingLogo(true);
+    try {
+      // Compress logo to under 150KB
+      const options = {
+        maxSizeMB: 0.15,
+        maxWidthOrHeight: 400,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
+      };
+      
+      toast.loading(language === 'ar' ? 'جاري معالجة وضغط الشعار...' : 'Processing and compressing logo...', { id: 'logo-upload' });
+      const compressedFile = await imageCompression(file, options);
+
+      const fileExt = 'jpg';
+      const fileName = `${company.id}_${Date.now()}.${fileExt}`;
+      const filePath = `company-logos/${fileName}`;
+
+      // Upload to Supabase Storage bucket 'avatars' (public bucket)
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, compressedFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Save to database companies table
+      const { error: dbError } = await supabase
+        .from('companies')
+        .update({ logo_url: publicUrl })
+        .eq('id', company.id);
+
+      if (dbError) throw dbError;
+
+      logActivity('company_settings_updated', 'company', company.id, { logoUrl: publicUrl });
+      setLogoUrl(publicUrl);
+      toast.success(language === 'ar' ? 'تم تحديث شعار الشركة بنجاح' : 'Company logo updated successfully', { id: 'logo-upload' });
+      await refreshRole();
+    } catch (err: any) {
+      toast.error(err.message || (language === 'ar' ? 'فشل رفع الشعار' : 'Failed to upload logo'), { id: 'logo-upload' });
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -178,10 +245,14 @@ export default function ProfileSettings() {
   const handleRegisterEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmpName.trim() || !newEmpEmail.trim() || !newEmpPassword.trim()) {
-      return toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return toast.error(language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmpEmail.trim())) {
+      return toast.error(language === 'ar' ? 'يرجى إدخال بريد إلكتروني صحيح للموظف' : 'Please enter a valid email address');
     }
     if (newEmpPassword.length < 6) {
-      return toast.error('كلمة المرور للموظف يجب ألا تقل عن 6 أحرف');
+      return toast.error(language === 'ar' ? 'كلمة المرور للموظف يجب ألا تقل عن 6 أحرف' : 'Password must be at least 6 characters');
     }
 
     setRegistering(true);
@@ -196,26 +267,31 @@ export default function ProfileSettings() {
       });
 
       if (error) {
-        throw new Error(error.message || 'فشل تسجيل العضو الجديد');
+        throw new Error(error.message || (language === 'ar' ? 'فشل تسجيل العضو الجديد' : 'Failed to register team member'));
       }
       
       if (data?.error) {
         throw new Error(data.error);
       }
 
-      toast.success(`تم تسجيل ${newEmpRole === 'manager' ? 'مدير' : 'موظف'} جديد بنجاح: ${newEmpName}`);
+      logActivity('employee_added', 'user', data?.user?.id || null, { name: newEmpName, email: newEmpEmail, role: newEmpRole });
+      toast.success(
+        language === 'ar' 
+          ? `تم تسجيل ${newEmpRole === 'manager' ? 'مدير' : 'موظف'} جديد بنجاح: ${newEmpName}`
+          : `Successfully registered new ${newEmpRole === 'manager' ? 'manager' : 'employee'}: ${newEmpName}`
+      );
       setNewEmpName('');
       setNewEmpEmail('');
       setNewEmpPassword('');
     } catch (err: any) {
-      toast.error(err.message || 'فشل تسجيل الحساب');
+      toast.error(err.message || (language === 'ar' ? 'فشل تسجيل الحساب' : 'Failed to register account'));
     } finally {
       setRegistering(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans pb-16" dir="rtl">
+    <div className="min-h-screen bg-slate-50 font-sans pb-16" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="bg-white border-b border-slate-100 px-6 pb-4 safe-pt flex items-center gap-4 sticky top-0 z-20 shadow-xs">
         <button 
@@ -230,11 +306,15 @@ export default function ProfileSettings() {
           }} 
           className="p-2 hover:bg-slate-50 border-none bg-transparent rounded-full transition-colors cursor-pointer"
         >
-          <ArrowRight className="w-5 h-5 text-slate-600" />
+          <ArrowRight className={`w-5 h-5 text-slate-600 ${language === 'en' ? 'rotate-180' : ''}`} />
         </button>
         <div>
-          <h1 className="text-lg font-bold text-slate-800 m-0">إعدادات الحساب الشخصي</h1>
-          <p className="text-xs text-slate-400 mt-0.5 m-0">إدارة معلومات الملف والصلاحيات</p>
+          <h1 className="text-lg font-bold text-slate-800 m-0">
+            {language === 'ar' ? 'إعدادات الحساب الشخصي' : 'Account Settings'}
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5 m-0">
+            {language === 'ar' ? 'إدارة معلومات الملف والصلاحيات' : 'Manage Profile Info & Permissions'}
+          </p>
         </div>
       </header>
 
@@ -245,10 +325,10 @@ export default function ProfileSettings() {
           <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
             <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-blue-100 flex items-center justify-center bg-slate-100 text-slate-300">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="صورة الملف" className="w-full h-full object-cover" />
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-4xl font-bold text-blue-600">
-                  {(profile?.name || user?.email || 'م')[0].toUpperCase()}
+                  {(profile?.name || user?.email || 'M')[0].toUpperCase()}
                 </span>
               )}
             </div>
@@ -264,17 +344,23 @@ export default function ProfileSettings() {
             />
           </div>
           
-          <div className="text-center sm:text-right space-y-1">
-            <h3 className="font-bold text-slate-900 text-base">{profile?.name || 'مستخدم جديد'}</h3>
+          <div className={`text-center ${language === 'ar' ? 'sm:text-right' : 'sm:text-left'} space-y-1`}>
+            <h3 className="font-bold text-slate-900 text-base">{profile?.name || (language === 'ar' ? 'مستخدم جديد' : 'New User')}</h3>
             <p className="text-sm text-slate-500">{user?.email}</p>
             {profile?.email && user?.email && profile.email.toLowerCase() !== user.email.toLowerCase() && (
               <span className="text-xs text-amber-600 block font-semibold">
-                ⏳ بانتظار تأكيد البريد الجديد: {profile.email}
+                {language === 'ar' 
+                  ? `⏳ بانتظار تأكيد البريد الجديد: ${profile.email}`
+                  : `⏳ Waiting for new email verification: ${profile.email}`}
               </span>
             )}
             <div className="flex items-center gap-1.5 justify-center sm:justify-start text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full w-fit">
               <Shield className="w-3.5 h-3.5" />
-              {profile?.role === 'super_admin' ? 'مشرف المنصة' : profile?.role === 'manager' ? 'مدير النظام' : 'موظف ميداني'}
+              {profile?.role === 'super_admin' 
+                ? (language === 'ar' ? 'مشرف المنصة' : 'Super Admin') 
+                : profile?.role === 'manager' 
+                  ? (language === 'ar' ? 'مدير النظام' : 'Manager') 
+                  : (language === 'ar' ? 'موظف ميداني' : 'Field Employee')}
             </div>
           </div>
         </div>
@@ -286,29 +372,35 @@ export default function ProfileSettings() {
           <form onSubmit={handleUpdateProfile} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-7 h-7 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">ℹ️</span>
-              <h3 className="font-bold text-slate-800 text-sm">بيانات الملف الشخصي</h3>
+              <h3 className="font-bold text-slate-800 text-sm">
+                {language === 'ar' ? 'بيانات الملف الشخصي' : 'Profile Details'}
+              </h3>
             </div>
             
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500">الاسم بالكامل</label>
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'الاسم بالكامل' : 'Full Name'}
+              </label>
               <input 
                 type="text" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                placeholder="أدخل اسمك بالكامل"
+                placeholder={language === 'ar' ? 'أدخل اسمك بالكامل' : 'Enter your full name'}
                 required
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500">البريد الإلكتروني</label>
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}
+              </label>
               <input 
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                placeholder="أدخل البريد الإلكتروني الجديد"
+                placeholder={language === 'ar' ? 'أدخل البريد الإلكتروني الجديد' : 'Enter new email address'}
                 required
               />
             </div>
@@ -319,7 +411,7 @@ export default function ProfileSettings() {
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {isUpdatingProfile ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              {isUpdatingProfile ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes')}
             </button>
           </form>
 
@@ -327,29 +419,35 @@ export default function ProfileSettings() {
           <form onSubmit={handleChangePassword} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-7 h-7 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center text-sm font-bold">🔒</span>
-              <h3 className="font-bold text-slate-800 text-sm">تغيير كلمة المرور</h3>
+              <h3 className="font-bold text-slate-800 text-sm">
+                {language === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}
+              </h3>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500">كلمة المرور الجديدة</label>
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'كلمة المرور الجديدة' : 'New Password'}
+              </label>
               <input 
                 type="password" 
                 value={newPassword} 
                 onChange={(e) => setNewPassword(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                placeholder="أدخل 6 أحرف على الأقل"
+                placeholder={language === 'ar' ? 'أدخل 6 أحرف على الأقل' : 'At least 6 characters'}
                 required
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500">تأكيد كلمة المرور</label>
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Password'}
+              </label>
               <input 
                 type="password" 
                 value={confirmPassword} 
                 onChange={(e) => setConfirmPassword(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                placeholder="أعد كتابة كلمة المرور"
+                placeholder={language === 'ar' ? 'أعد كتابة كلمة المرور' : 'Retype password'}
                 required
               />
             </div>
@@ -360,9 +458,49 @@ export default function ProfileSettings() {
               className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white border-none py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
-              {isUpdatingPassword ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
+              {isUpdatingPassword ? (language === 'ar' ? 'جاري التحديث...' : 'Updating...') : (language === 'ar' ? 'تحديث كلمة المرور' : 'Update Password')}
             </button>
           </form>
+
+          {/* Form 3: Application Settings (Language Switcher) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
+              <span className="w-7 h-7 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center text-sm font-bold">🌐</span>
+              <h3 className="font-bold text-slate-800 text-sm">
+                {language === 'ar' ? 'إعدادات اللغة' : 'Language Settings'}
+              </h3>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'لغة التطبيق' : 'App Language'}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => changeLanguage('ar')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                    language === 'ar'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  العربية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeLanguage('en')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                    language === 'en'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  English
+                </button>
+              </div>
+            </div>
+          </div>
 
         </div>
 
@@ -372,26 +510,36 @@ export default function ProfileSettings() {
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-8 h-8 bg-green-50 text-green-600 rounded-full flex items-center justify-center text-sm font-bold">➕</span>
               <div>
-                <h3 className="font-bold text-slate-800 text-sm md:text-base">إضافة عضو جديد للفريق</h3>
-                <p className="text-xs text-slate-400">توليد حساب موظف أو مدير جديد وإسناده مباشرة لقاعدة البيانات</p>
+                <h3 className="font-bold text-slate-800 text-sm md:text-base">
+                  {language === 'ar' ? 'إضافة عضو جديد للفريق' : 'Add New Team Member'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {language === 'ar' 
+                    ? 'توليد حساب موظف أو مدير جديد وإسناده مباشرة لقاعدة البيانات' 
+                    : 'Create a new manager or employee account and add them to the database'}
+                </p>
               </div>
             </div>
 
             <form onSubmit={handleRegisterEmployee} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">الاسم بالكامل</label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'الاسم بالكامل' : 'Full Name'}
+                </label>
                 <input 
                   type="text" 
                   value={newEmpName} 
                   onChange={(e) => setNewEmpName(e.target.value)} 
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                  placeholder="الاسم الثلاثي"
+                  placeholder={language === 'ar' ? 'الاسم الثلاثي' : 'Enter full name'}
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">البريد الإلكتروني</label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}
+                </label>
                 <input 
                   type="email" 
                   value={newEmpEmail} 
@@ -403,26 +551,30 @@ export default function ProfileSettings() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">كلمة المرور الأولية</label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'كلمة المرور الأولية' : 'Initial Password'}
+                </label>
                 <input 
                   type="password" 
                   value={newEmpPassword} 
                   onChange={(e) => setNewEmpPassword(e.target.value)} 
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                  placeholder="لا تقل عن 6 أحرف"
+                  placeholder={language === 'ar' ? 'لا تقل عن 6 أحرف' : 'At least 6 characters'}
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">الصلاحية والوظيفة</label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'الصلاحية والوظيفة' : 'Role & Permission'}
+                </label>
                 <select 
                   value={newEmpRole} 
                   onChange={(e) => setNewEmpRole(e.target.value as any)} 
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm bg-white"
                 >
-                  <option value="employee">موظف ميداني</option>
-                  <option value="manager">مدير نظام</option>
+                  <option value="employee">{language === 'ar' ? 'موظف ميداني' : 'Field Employee'}</option>
+                  <option value="manager">{language === 'ar' ? 'مدير نظام' : 'System Manager'}</option>
                 </select>
               </div>
 
@@ -433,7 +585,9 @@ export default function ProfileSettings() {
                   className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white border-none py-3 rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
                 >
                   <UserPlus className="w-4 h-4" />
-                  {isRegistering ? 'جاري تسجيل العضو...' : 'تسجيل العضو الجديد'}
+                  {isRegistering 
+                    ? (language === 'ar' ? 'جاري تسجيل العضو...' : 'Registering member...') 
+                    : (language === 'ar' ? 'تسجيل العضو الجديد' : 'Register New Member')}
                 </button>
               </div>
             </form>
@@ -446,38 +600,87 @@ export default function ProfileSettings() {
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">🏢</span>
               <div>
-                <h3 className="font-bold text-slate-800 text-sm md:text-base">إعدادات الشركة والاشتراك</h3>
-                <p className="text-xs text-slate-400">إدارة معلومات المنشأة وحالة باقة الاشتراك الحالية</p>
+                <h3 className="font-bold text-slate-800 text-sm md:text-base">
+                  {language === 'ar' ? 'إعدادات الشركة والاشتراك' : 'Company & Subscription Settings'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {language === 'ar' 
+                    ? 'إدارة معلومات المنشأة وحالة باقة الاشتراك الحالية' 
+                    : 'Manage facility details and current subscription package'}
+                </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <span className="text-xs text-slate-400 block mb-1">باقة الاشتراك</span>
+                <span className="text-xs text-slate-400 block mb-1">
+                  {language === 'ar' ? 'باقة الاشتراك' : 'Subscription Plan'}
+                </span>
                 <span className="font-bold text-slate-800 text-sm capitalize">{company.plan}</span>
               </div>
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <span className="text-xs text-slate-400 block mb-1">الحد الأقصى للموظفين</span>
-                <span className="font-bold text-slate-800 text-sm">{company.maxEmployees} موظف</span>
+                <span className="text-xs text-slate-400 block mb-1">
+                  {language === 'ar' ? 'الحد الأقصى للموظفين' : 'Max Employees'}
+                </span>
+                <span className="font-bold text-slate-800 text-sm">
+                  {company.maxEmployees} {language === 'ar' ? 'موظف' : 'employees'}
+                </span>
               </div>
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <span className="text-xs text-slate-400 block mb-1">حالة الاشتراك</span>
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600 bg-green-50 px-2.5 py-0.5 rounded-full mt-1">
-                  <CheckCircle className="w-3 h-3" /> نشط
+                <span className="text-xs text-slate-400 block mb-1">
+                  {language === 'ar' ? 'حالة الاشتراك' : 'Subscription Status'}
                 </span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600 bg-green-50 px-2.5 py-0.5 rounded-full mt-1">
+                  <CheckCircle className="w-3 h-3" /> {language === 'ar' ? 'نشط' : 'Active'}
+                </span>
+              </div>
+            </div>
+
+            {/* Logo Upload Card Section */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div className="relative group cursor-pointer shrink-0" onClick={() => logoFileInputRef.current?.click()}>
+                <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 flex items-center justify-center bg-white text-slate-300">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl font-bold text-blue-600">🏢</span>
+                  )}
+                </div>
+                <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="w-4 h-4 text-white" />
+                </div>
+                <input 
+                  type="file" 
+                  ref={logoFileInputRef} 
+                  onChange={handleLogoChange} 
+                  accept="image/*" 
+                  className="hidden" 
+                />
+              </div>
+              <div className={`text-center ${language === 'ar' ? 'sm:text-right' : 'sm:text-left'}`}>
+                <h4 className="font-bold text-slate-800 text-sm m-0">
+                  {language === 'ar' ? 'شعار المؤسسة' : 'Company Logo'}
+                </h4>
+                <p className="text-[10px] text-slate-400 mt-1 mb-0 leading-relaxed">
+                  {language === 'ar' 
+                    ? 'انقر على المربع لتعديل الشعار أو رفعه (حجم أقصى 150 كيلوبايت، صيغ png, jpg, jpeg)'
+                    : 'Click box to update logo (max size 150KB, formats: png, jpg, jpeg)'}
+                </p>
               </div>
             </div>
 
             <form onSubmit={handleUpdateCompany} className="space-y-4 pt-2">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">اسم الشركة</label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'اسم الشركة' : 'Company Name'}
+                </label>
                 <div className="flex gap-3">
                   <input 
                     type="text" 
                     value={companyName} 
                     onChange={(e) => setCompanyName(e.target.value)} 
                     className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm bg-slate-50 focus:bg-white transition"
-                    placeholder="اسم الشركة"
+                    placeholder={language === 'ar' ? 'اسم الشركة' : 'Company Name'}
                     required
                   />
                   <button 
@@ -486,7 +689,7 @@ export default function ProfileSettings() {
                     className="bg-blue-600 hover:bg-blue-700 text-white border-none px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 shrink-0 shadow-sm"
                   >
                     <Save className="w-4 h-4" />
-                    {isUpdatingCompany ? 'جاري الحفظ...' : 'حفظ الاسم'}
+                    {isUpdatingCompany ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ الاسم' : 'Save Name')}
                   </button>
                 </div>
               </div>

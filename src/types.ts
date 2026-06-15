@@ -65,3 +65,17 @@ export const statusColors: Record<TaskStatus, string> = {
   completed: 'bg-green-100 text-green-800',
   pending: 'bg-red-100 text-red-800'
 };
+
+export function mapCompanyFromDB(dbCompany: any): Company {
+  if (!dbCompany) return null as any;
+  return {
+    id: dbCompany.id,
+    name: dbCompany.name,
+    slug: dbCompany.slug,
+    logoUrl: dbCompany.logo_url,
+    plan: dbCompany.plan,
+    maxEmployees: dbCompany.max_employees,
+    createdAt: dbCompany.created_at,
+    isActive: dbCompany.is_active
+  };
+}

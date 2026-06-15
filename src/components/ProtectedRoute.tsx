@@ -1,6 +1,7 @@
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect } from 'react';
+import { useTranslation } from '../contexts/LanguageContext';
 
 export default function ProtectedRoute({ 
   children, 
@@ -12,6 +13,7 @@ export default function ProtectedRoute({
   const { user, userRole, loading } = useAuth();
   const navigate = useNavigate();
   const [loadingTime, setLoadingTime] = useState(0);
+  const { language } = useTranslation();
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -28,10 +30,16 @@ export default function ProtectedRoute({
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="rounded-full h-10 w-10 bg-blue-600 animate-ping mb-4"></div>
         {loadingTime > 3 && (
-           <div className="text-slate-500 font-medium z-50">جاري الدخول للنظام... ({loadingTime} ثانية)</div>
+           <div className="text-slate-500 font-medium z-50">
+             {language === 'ar' 
+               ? `جاري الدخول للنظام... (${loadingTime} ثانية)` 
+               : `Logging in... (${loadingTime} seconds)`}
+           </div>
         )}
         {loadingTime > 8 && (
-           <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-200 rounded hover:bg-slate-300 z-50 relative">تحديث الصفحة</button>
+           <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-200 rounded hover:bg-slate-300 z-50 relative border-none cursor-pointer">
+             {language === 'ar' ? 'تحديث الصفحة' : 'Refresh Page'}
+           </button>
         )}
       </div>
     );
@@ -49,16 +57,20 @@ export default function ProtectedRoute({
   
   if (allowedRole && !userRole) {
      // User has no role assigned yet inside Supabase, but is authenticated.
-     // In a real app we might show a "wait for admin approval" screen, 
-     // but here we just show a little message or redirect.
-     return <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center font-sans" dir="rtl">
-        <h2 className="text-xl font-bold mb-2">حسابك قيد المراجعة</h2>
-        <p className="mb-4">لم يتم تعيين دور لك في النظام بعد. يرجى التواصل مع المدير.</p>
+     return <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center font-sans" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        <h2 className="text-xl font-bold mb-2">
+          {language === 'ar' ? 'حسابك قيد المراجعة' : 'Account Under Review'}
+        </h2>
+        <p className="mb-4 text-slate-500">
+          {language === 'ar' 
+            ? 'لم يتم تعيين دور لك في النظام بعد. يرجى التواصل مع المدير.' 
+            : 'No role assigned to your account yet. Please contact the manager.'}
+        </p>
         <button 
           onClick={() => navigate('/login')} 
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 border-none cursor-pointer font-semibold"
         >
-          العودة لتسجيل الدخول
+          {language === 'ar' ? 'العودة لتسجيل الدخول' : 'Back to Login'}
         </button>
      </div>
   }

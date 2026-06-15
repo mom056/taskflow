@@ -184,25 +184,49 @@ serve(async (req) => {
     const payload = await req.json();
     console.log('[PushService] Webhook:', payload.type, payload.table);
 
-    if (payload.type !== 'INSERT' || payload.table !== 'tasks') {
+    if ((payload.type !== 'INSERT' && payload.type !== 'UPDATE') || payload.table !== 'tasks') {
       return new Response(JSON.stringify({ message: 'Ignored' }), {
         headers: { "Content-Type": "application/json" }, status: 200,
       });
     }
 
     const task = payload.record;
-    const employeeId = task.employee_id;
-    if (!employeeId) {
-      return new Response(JSON.stringify({ message: 'No employee assigned' }), {
+    let targetUserId = null;
+    let title = '';
+    let body = '';
+
+    if (payload.type === 'INSERT') {
+      targetUserId = task.employee_id;
+      title = '📋 مهمة جديدة!';
+      body = `تم تعيين مهمة لك: ${task.title}`;
+    } else if (payload.type === 'UPDATE') {
+      const oldStatus = payload.old_record?.status;
+      const newStatus = task.status;
+
+      if (oldStatus !== newStatus) {
+        if (newStatus === 'in_progress') {
+          targetUserId = task.created_by;
+          title = '🚀 بدأ العمل!';
+          body = `بدأ الموظف العمل على المهمة: ${task.title}`;
+        } else if (newStatus === 'completed') {
+          targetUserId = task.created_by;
+          title = '✅ تم إنجاز المهمة!';
+          body = `أكمل الموظف المهمة: ${task.title}`;
+        }
+      }
+    }
+
+    if (!targetUserId) {
+      return new Response(JSON.stringify({ message: 'No target user to notify' }), {
         headers: { "Content-Type": "application/json" }, status: 200,
       });
     }
 
-    // Fetch all subscriptions for this employee
+    // Fetch all subscriptions for target user
     const { data: subscriptions, error } = await supabaseAdmin
       .from('push_subscriptions')
       .select('*')
-      .eq('user_id', employeeId);
+      .eq('user_id', targetUserId);
 
     if (error) throw error;
     if (!subscriptions?.length) {
@@ -211,8 +235,6 @@ serve(async (req) => {
       });
     }
 
-    const title = '📋 مهمة جديدة!';
-    const body = `تم تعيين مهمة لك: ${task.title}`;
     const webPayload = JSON.stringify({ title, body, url: '/' });
 
     // Prepare FCM access token (if we have native subscriptions)

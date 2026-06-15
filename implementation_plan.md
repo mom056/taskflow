@@ -337,39 +337,415 @@
 # 🛠️ خطة عمل: إدارة الموظفين وعرض حالتهم الميدانية
 
 تتناول هذه الخطة تمكين المدير من:
+
 1. **تعديل وحذف الموظفين** (الاسم، البريد الإلكتروني، كلمة المرور، والدور الوظيفي) بشكل آمن تماماً عبر الدالة السحابية (Deno Edge Function).
 2. **عرض حالة كل موظف** (هل هو في مهمة حالياً قيد التنفيذ أم متاح).
 
 ## مراجعة المستخدم المطلوبة (User Review Required)
 
 > [!IMPORTANT]
-> بما أن تعديل وحذف بيانات المستخدمين المسجلين في نظام المصادقة (Supabase Auth) يتطلب صلاحيات مسؤول النظام (Service Role)، فإننا نقوم بذلك بأمان تام من خلال تحديث الدالة السحابية الحالية `create-user` لتصبح شاملة لإدارة المستخدمين (`create`, `update`, `delete`). 
+> بما أن تعديل وحذف بيانات المستخدمين المسجلين في نظام المصادقة (Supabase Auth) يتطلب صلاحيات مسؤول النظام (Service Role)، فإننا نقوم بذلك بأمان تام من خلال تحديث الدالة السحابية الحالية `create-user` لتصبح شاملة لإدارة المستخدمين (`create`, `update`, `delete`).
 > سيتعين عليك نشر الدالة المحدثة بعد انتهاء التطبيق باستخدام الأمر:
 > `npx supabase functions deploy create-user`
 
 ## التغييرات المقترحة (Proposed Changes)
 
 ### 1. الدالة السحابية (Edge Function)
+
 #### [MODIFY] [index.ts](file:///d:/CP+/taskflow/supabase/functions/create-user/index.ts)
-* إضافة دعم للمعلمة `action` في جسم الطلب (`create` أو `update` أو `delete`).
-* التحقق من أن المدير الذي يطلب التعديل/الحذف يتبع نفس الشركة التي يتبعها الموظف المستهدف لمنع التلاعب عبر الشركات المختلفة.
-* في حالة `update`: تحديث البريد الإلكتروني، الاسم، وكلمة المرور (اختيارياً) في `auth.users` وتحديث جدول `public.users`.
-* في حالة `delete`: حذف الموظف نهائياً من المصادقة وجدول المستخدمين.
+
+- إضافة دعم للمعلمة `action` في جسم الطلب (`create` أو `update` أو `delete`).
+- التحقق من أن المدير الذي يطلب التعديل/الحذف يتبع نفس الشركة التي يتبعها الموظف المستهدف لمنع التلاعب عبر الشركات المختلفة.
+- في حالة `update`: تحديث البريد الإلكتروني، الاسم، وكلمة المرور (اختيارياً) في `auth.users` وتحديث جدول `public.users`.
+- في حالة `delete`: حذف الموظف نهائياً من المصادقة وجدول المستخدمين.
 
 ### 2. لوحة تحكم المدير (Manager Dashboard)
+
 #### [MODIFY] [ManagerDashboard.tsx](file:///d:/CP+/taskflow/src/pages/ManagerDashboard.tsx)
-* **عرض حالة الموظف**:
-  * نقوم بحساب حالة كل موظف تلقائياً من خلال البحث في قائمة المهام النشطة: إذا كان لديه مهمة حالتها `in_progress` (جاري العمل)، تظهر بجانب اسمه علامة خضراء 🟢 **"في مهمة: [اسم المهمة]"**.
-  * إذا لم يكن لديه أي مهمة قيد العمل، تظهر علامة رمادية ⚪ **"متاح"**.
-* **إدارة الموظفين (تعديل وحذف)**:
-  * إضافة عمود الإجراءات (الخيارات) في قائمة الموظفين (تعديل / حذف) في نسختي الكمبيوتر والجوال.
-  * إضافة نافذة منبثقة (Modal) لتعديل الاسم، البريد الإلكتروني، وتغيير كلمة المرور أو حذف الموظف نهائياً مع إشعار تأكيدي منعاً للحذف بالخطأ.
+
+- **عرض حالة الموظف**:
+  - نقوم بحساب حالة كل موظف تلقائياً من خلال البحث في قائمة المهام النشطة: إذا كان لديه مهمة حالتها `in_progress` (جاري العمل)، تظهر بجانب اسمه علامة خضراء 🟢 **"في مهمة: [اسم المهمة]"**.
+  - إذا لم يكن لديه أي مهمة قيد العمل، تظهر علامة رمادية ⚪ **"متاح"**.
+- **إدارة الموظفين (تعديل وحذف)**:
+  - إضافة عمود الإجراءات (الخيارات) في قائمة الموظفين (تعديل / حذف) في نسختي الكمبيوتر والجوال.
+  - إضافة نافذة منبثقة (Modal) لتعديل الاسم، البريد الإلكتروني، وتغيير كلمة المرور أو حذف الموظف نهائياً مع إشعار تأكيدي منعاً للحذف بالخطأ.
 
 ---
 
 ## خطة التحقق والطلب (Verification Plan)
 
 ### التحقق التلقائي واليدوي:
+
 1. **اختبار التعديل**: تعديل اسم وإيميل موظف، والتأكد من إمكانية تسجيل دخوله بالإيميل الجديد بنجاح.
 2. **اختبار الحذف**: حذف موظف والتأكد من اختفائه من لوحة التحكم، وتعذر تسجيل الدخول بحسابه.
 3. **اختبار الحالة الميدانية**: تشغيل مهمة لموظف، والتأكد من تغير حالته فوراً في لوحة المدير إلى "في مهمة: [اسم المهمة]"، ثم إرجاعها لـ "متاح" عند إكمال المهمة.
+
+# 🏗️ خطة تنفيذية شاملة لإكمال مشروع TaskFlow
+
+بناءً على المراجعة الكاملة لجميع ملفات المشروع (الكود، قاعدة البيانات، الدوال السحابية، الخدمات الأصلية)، تم تصنيف جميع النواقص وترتيبها في 5 مراحل تنفيذية متسلسلة.
+
+---
+
+## المرحلة 1: الأمان والأساسيات الحرجة (Critical)
+
+> **الهدف:** سد جميع الثغرات الأمنية وإضافة الوظائف الأساسية التي بدونها لا يمكن إطلاق التطبيق للعملاء.
+> **الجهد التقديري:** 1-2 يوم عمل
+
+---
+
+### 1.1 إضافة خاصية "نسيت كلمة المرور" (Password Reset)
+
+**الحالة الحالية:** لا يوجد أي آلية لاستعادة كلمة المرور المنسية.
+
+#### [MODIFY] [Login.tsx](file:///d:/CP+/taskflow/src/pages/Login.tsx)
+
+- إضافة رابط "نسيت كلمة المرور؟" أسفل حقل كلمة المرور.
+- عند الضغط عليه، يظهر حقل بريد إلكتروني ويستدعي `supabase.auth.resetPasswordForEmail(email)`.
+- عرض رسالة تأكيد: "تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني".
+
+#### [NEW] [ResetPassword.tsx](file:///d:/CP+/taskflow/src/pages/ResetPassword.tsx)
+
+- صفحة جديدة يصل إليها المستخدم عبر رابط الاستعادة المرسل بالبريد.
+- تحتوي على حقلي "كلمة المرور الجديدة" و"تأكيد كلمة المرور".
+- تستدعي `supabase.auth.updateUser({ password: newPassword })`.
+
+#### [MODIFY] [App.tsx](file:///d:/CP+/taskflow/src/App.tsx)
+
+- إضافة Route جديد: `/reset-password` يشير إلى `ResetPassword.tsx`.
+
+---
+
+### 1.2 فرض حد الموظفين على مستوى قاعدة البيانات (Database-Level Enforcement)
+
+**الحالة الحالية:** الفحص موجود في Edge Function `create-user` (سطر 99-120) وهذا ممتاز ✅، لكنه غير مطبق على مستوى قاعدة البيانات كطبقة حماية إضافية. يمكن لأي شخص لديه Service Role Key تجاوز الـ Edge Function.
+
+#### [MODIFY] [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql)
+
+- إضافة Trigger جديد `check_employee_limit` على جدول `users` يمنع `INSERT` إذا تجاوز عدد الموظفين الحد المسموح:
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_employee_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  current_count INT;
+  max_allowed INT;
+BEGIN
+  IF NEW.role = 'employee' THEN
+    SELECT max_employees INTO max_allowed FROM public.companies WHERE id = NEW.company_id;
+    SELECT COUNT(*) INTO current_count FROM public.users WHERE company_id = NEW.company_id AND role = 'employee';
+    IF current_count >= max_allowed THEN
+      RAISE EXCEPTION 'تم تجاوز الحد الأقصى للموظفين المسموح به لهذه الشركة (% موظف).', max_allowed;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+---
+
+### 1.3 التحقق من نشر دالة الإشعارات الفورية (Push Notification Deployment)
+
+**الحالة الحالية:** ✅ الكود كامل ومتكامل:
+
+- **Frontend:** `usePushNotifications.ts` + `nativeServices.ts` (تسجيل التوكنات).
+- **Backend:** `send-push/index.ts` (إرسال Web Push + FCM v1).
+- **Database Trigger:** `notify_new_task_webhook.sql` (يستدعي Edge Function تلقائياً عند إنشاء مهمة).
+
+**ما يجب التحقق منه فقط:**
+
+- [ ] هل تم نشر (Deploy) دالة `send-push` على Supabase؟
+  ```bash
+  npx supabase functions deploy send-push --no-verify-jwt
+  ```
+- [ ] هل تم تشغيل ملف `notify_new_task_webhook.sql` في SQL Editor؟
+- [ ] هل تم إضافة المتغيرات السرية (Secrets) في Supabase:
+  - `VAPID_PUBLIC_KEY` و `VAPID_PRIVATE_KEY` (لإشعارات المتصفح).
+  - `FIREBASE_SERVICE_ACCOUNT` (لإشعارات أندرويد - ملف JSON من Firebase Console).
+
+---
+
+### 1.4 إضافة نوافذ تأكيد للعمليات الحساسة (Confirmation Dialogs)
+
+**الحالة الحالية:** تأكيد حذف الموظف موجود ✅، لكن تأكيد تسجيل الخروج وتعطيل الشركات غير موجود.
+
+#### [MODIFY] [ManagerDashboard.tsx](file:///d:/CP+/taskflow/src/pages/ManagerDashboard.tsx)
+
+#### [MODIFY] [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx)
+
+- إضافة نافذة تأكيد (Modal) عند الضغط على زر "تسجيل الخروج" تحتوي على: "هل أنت متأكد من تسجيل الخروج؟" مع زري "نعم" و"إلغاء".
+
+#### [MODIFY] [SuperAdminDashboard.tsx](file:///d:/CP+/taskflow/src/pages/SuperAdminDashboard.tsx)
+
+- إضافة نافذة تأكيد عند الضغط على زر "إيقاف الشركة" تحتوي على: "سيتم منع جميع مستخدمي هذه الشركة من الدخول فوراً. هل أنت متأكد؟"
+
+---
+
+## المرحلة 2: تحسين تجربة المستخدم والتفاعلية (UX & Interactivity)
+
+> **الهدف:** جعل التطبيق أكثر فائدة وتفاعلية لجميع أنواع المستخدمين.
+> **الجهد التقديري:** 2-3 أيام عمل
+
+---
+
+### 2.1 إضافة بطاقات إحصائية لأداء الموظف الشخصي
+
+**الحالة الحالية:** لوحة الموظف (`EmployeeDashboard.tsx`) تعرض قائمة المهام فقط بدون أي ملخص أو إحصائيات.
+
+#### [MODIFY] [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx)
+
+- إضافة شريط بطاقات إحصائية (KPI Cards) في أعلى الصفحة يعرض:
+  - إجمالي المهام المسندة.
+  - المهام المكتملة هذا الأسبوع.
+  - المهام الجارية حالياً.
+  - نسبة الإنجاز (%).
+- استخدام `useMemo` لحساب هذه الإحصائيات من مصفوفة `tasks` الموجودة مسبقاً.
+
+---
+
+### 2.2 إضافة فلتر التاريخ في تقارير المدير
+
+**الحالة الحالية:** تصدير التقارير (`useReportExport.ts`) يصدر جميع المهام بدون أي فلترة بالتاريخ.
+
+#### [MODIFY] [ManagerDashboard.tsx](file:///d:/CP+/taskflow/src/pages/ManagerDashboard.tsx)
+
+- إضافة حقلي تاريخ (من/إلى) فوق جدول المهام وفي تبويب التحليلات.
+- تطبيق الفلترة على المهام قبل تمريرها لـ `useReportExport` و الرسوم البيانية.
+
+---
+
+### 2.3 إعدادات الشركة وشعارها (Company Settings & Logo)
+
+**الحالة الحالية:** صفحة `ProfileSettings.tsx` تحتوي على حقل لتعديل اسم الشركة (سطر 22)، لكن حقل شعار الشركة (`logo_url`) غير مستخدم في أي واجهة.
+
+#### [MODIFY] [ProfileSettings.tsx](file:///d:/CP+/taskflow/src/pages/ProfileSettings.tsx)
+
+- إضافة قسم "إعدادات الشركة" يتضمن:
+  - حقل تعديل اسم الشركة (موجود بالفعل، التأكد من ربطه بعملية `update` فعلية).
+  - زر رفع شعار الشركة يستخدم Supabase Storage لرفع الصورة وحفظ الرابط في `companies.logo_url`.
+- عرض شعار الشركة في الهيدر الخاص بلوحتي المدير والموظف.
+
+---
+
+### 2.4 تحديث فوري (Realtime) وبحث في لوحة المشرف العام
+
+**الحالة الحالية:** لا يوجد Realtime Subscription أو بحث نصي في `SuperAdminDashboard.tsx`.
+
+#### [MODIFY] [SuperAdminDashboard.tsx](file:///d:/CP+/taskflow/src/pages/SuperAdminDashboard.tsx)
+
+- إضافة Supabase Realtime Channel على جدولي `companies` و `users` لتحديث البيانات فوراً.
+- إضافة حقل بحث نصي يفلتر الشركات حسب الاسم أو بريد المدير.
+
+---
+
+## المرحلة 3: سلامة البيانات والعمل بدون إنترنت (Data Integrity & Offline)
+
+> **الهدف:** ضمان عدم فقدان أي بيانات وتمكين العمل المتواصل حتى بدون اتصال.
+> **الجهد التقديري:** 2-3 أيام عمل
+
+---
+
+### 3.1 تخزين البيانات مؤقتاً للعرض بدون إنترنت (Offline Data Caching)
+
+**الحالة الحالية:** `useOfflineQueue.ts` يحفظ العمليات الجديدة فقط ✅، لكن لا يتم تخزين البيانات المعروضة (المهام، الموظفون) محلياً. فتح التطبيق بدون إنترنت يعرض شاشة فارغة.
+
+#### [MODIFY] [main.tsx](file:///d:/CP+/taskflow/src/main.tsx)
+
+- تثبيت وتكوين `@tanstack/react-query-persist-client` مع `createSyncStoragePersister` لتخزين آخر نسخة من البيانات في `localStorage` (للويب) أو `Preferences` (للهواتف).
+- هذا يضمن أن الموظف يرى مهامه الأخيرة فوراً حتى بدون اتصال.
+
+---
+
+### 3.2 سجل الأحداث والعمليات (Activity / Audit Log)
+
+**الحالة الحالية:** لا يوجد أي نظام لتتبع العمليات أو تسجيل الأحداث.
+
+#### [MODIFY] [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql)
+
+- إنشاء جدول جديد `activity_log`:
+
+```sql
+CREATE TABLE IF NOT EXISTS public.activity_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  actor_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,           -- 'task_created', 'task_completed', 'employee_added', 'company_suspended', etc.
+  target_type TEXT,               -- 'task', 'user', 'company'
+  target_id TEXT,                 -- ID of the affected entity
+  metadata JSONB DEFAULT '{}',   -- Additional context (old values, new values, etc.)
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
+ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
+```
+
+- إضافة RLS Policy تسمح للمدير بقراءة سجلات شركته فقط.
+
+#### [MODIFY] [ManagerDashboard.tsx](file:///d:/CP+/taskflow/src/pages/ManagerDashboard.tsx)
+
+- إضافة تبويب جديد "سجل الأحداث" (Activity Log) يعرض آخر 50 حدث مع الفلترة حسب النوع والتاريخ.
+
+#### [MODIFY] Edge Functions & Frontend
+
+- تسجيل الأحداث المهمة عند حدوثها:
+  - إنشاء/إكمال/تعليق مهمة.
+  - إضافة/تعديل/حذف موظف.
+  - تعطيل/تنشيط شركة.
+
+---
+
+### 3.3 إشعارات تغيير حالة المهام (Task Status Change Notifications)
+
+**الحالة الحالية:** الإشعار يُرسل فقط عند إنشاء مهمة جديدة (INSERT trigger). لا يتم إرسال إشعار عندما يُكمل الموظف مهمة أو يعلقها.
+
+#### [MODIFY] [notify_new_task_webhook.sql](file:///d:/CP+/taskflow/supabase/migrations/notify_new_task_webhook.sql)
+
+- توسيع التريجر ليشمل أحداث `UPDATE` على جدول `tasks`:
+  - عند تغيير `status` إلى `completed`: إرسال إشعار للمدير (`created_by`) بعنوان "✅ تم إكمال المهمة: [عنوان المهمة]".
+  - عند تغيير `status` إلى `in_progress`: إرسال إشعار للمدير بعنوان "▶️ بدأ العمل على: [عنوان المهمة]".
+
+#### [MODIFY] [send-push/index.ts](file:///d:/CP+/taskflow/supabase/functions/send-push/index.ts)
+
+- توسيع المعالج ليدعم أحداث `UPDATE` بالإضافة لـ `INSERT`.
+- تحديد المستلم المناسب (المدير) بناءً على حقل `created_by` في المهمة.
+
+---
+
+## المرحلة 4: تقوية الإنتاج والجاهزية (Production Hardening)
+
+> **الهدف:** إصلاح الديون التقنية وضمان استقرار التطبيق في بيئة إنتاجية حقيقية.
+> **الجهد التقديري:** 1-2 يوم عمل
+
+---
+
+### 4.1 إصلاح عدم تطابق أنواع البيانات (Company Type Mismatch)
+
+**الحالة الحالية:** واجهة `Company` في `types.ts` تستخدم `camelCase` (مثل `isActive`, `maxEmployees`)، بينما Supabase تُرجع `snake_case` (مثل `is_active`, `max_employees`). الكود يستخدم `as any` cast كحل مؤقت في `AuthContext.tsx` (سطر 197).
+
+#### [MODIFY] [types.ts](file:///d:/CP+/taskflow/src/types.ts)
+
+- إنشاء دالة مساعدة `mapCompanyFromDB(raw: any): Company` تقوم بتحويل الحقول من `snake_case` إلى `camelCase` بشكل صريح.
+- استخدام هذه الدالة في كل مكان يتم فيه جلب بيانات الشركة بدلاً من `as Company` أو `as any`.
+
+---
+
+### 4.2 تضييق سياسة CORS في Edge Functions
+
+**الحالة الحالية:** ملف `create-user/index.ts` يستخدم `Access-Control-Allow-Origin: '*'` (سطر 12) مما يسمح لأي موقع بالاتصال بالدالة.
+
+#### [MODIFY] [create-user/index.ts](file:///d:/CP+/taskflow/supabase/functions/create-user/index.ts)
+
+- تقييد الـ Origin ليكون فقط نطاق التطبيق الإنتاجي:
+
+```typescript
+const ALLOWED_ORIGINS = [
+  "https://your-domain.com",
+  "http://localhost:3000", // Development
+  "capacitor://localhost", // Android
+  "ionic://localhost", // iOS
+];
+```
+
+---
+
+### 4.3 تحسين التحقق من المدخلات (Input Validation Hardening)
+
+**الحالة الحالية:** بعض الحقول لا تحتوي على تحقق كافٍ:
+
+- صفحة تسجيل الحساب لا تفحص طول كلمة المرور (الحد الأدنى لـ Supabase هو 6 أحرف).
+- حقل البريد الإلكتروني لا يتحقق من الصيغة الصحيحة قبل الإرسال.
+
+#### [MODIFY] [Login.tsx](file:///d:/CP+/taskflow/src/pages/Login.tsx)
+
+- إضافة فحص `password.length < 6` مع رسالة تحذير.
+- إضافة فحص regex بسيط للبريد الإلكتروني قبل إرسال الطلب.
+
+---
+
+### 4.4 تفعيل Service Worker للـ PWA
+
+**الحالة الحالية:** المشروع يستخدم `vite-plugin-pwa` (يظهر في ملف `dist/registerSW.js`)، لكن يجب التأكد من:
+
+#### التحقق:
+
+- [ ] وجود ملف `sw.js` أو تكوين `vite-plugin-pwa` في `vite.config.ts`.
+- [ ] إعداد Service Worker لتخزين الملفات الثابتة (CSS, JS, HTML) وعرضها بدون إنترنت.
+- [ ] إضافة `manifest.webmanifest` مكتمل بأيقونات وألوان التطبيق.
+
+---
+
+## المرحلة 5: النمو والتوسع المستقبلي (Growth & Scaling)
+
+> **الهدف:** إضافات اختيارية ترفع القيمة التجارية للمنتج.
+> **الجهد التقديري:** حسب الحاجة
+
+---
+
+### 5.1 صفحة هبوط تسويقية (Landing Page)
+
+**الحالة الحالية:** الزائر يُوجه مباشرة لصفحة تسجيل الدخول بدون أي تعريف بالتطبيق.
+
+#### [NEW] [LandingPage.tsx](file:///d:/CP+/taskflow/src/pages/LandingPage.tsx)
+
+- صفحة ترحيبية تعرض ميزات التطبيق الرئيسية (تتبع GPS، إدارة المهام، التقارير).
+- زرّا "سجل شركتك مجاناً" و"تسجيل الدخول".
+
+#### [MODIFY] [App.tsx](file:///d:/CP+/taskflow/src/App.tsx)
+
+- تعديل المسار الجذري `/` ليعرض `LandingPage` للزوار غير المسجلين بدلاً من التوجيه المباشر لـ `/login`.
+
+---
+
+### 5.2 دعم اللغة الإنجليزية (i18n)
+
+#### [NEW] [i18n/](file:///d:/CP+/taskflow/src/i18n/)
+
+- إنشاء مجلد ترجمة يحتوي على ملفي `ar.json` و `en.json`.
+- استخدام مكتبة `react-i18next` لتبديل اللغة ديناميكياً.
+- إضافة زر تبديل اللغة في صفحة الإعدادات والهيدر.
+
+---
+
+### 5.3 نظام الفواتير والدفع الإلكتروني (Billing - Placeholder)
+
+**الحالة الحالية:** حقل `plan` موجود في قاعدة البيانات ويُدار يدوياً من المشرف العام.
+
+#### مقترح مستقبلي:
+
+- ربط Stripe أو Paddle لإدارة الاشتراكات والدفع الإلكتروني.
+- إنشاء صفحة "الباقات والاشتراكات" تتيح للمدير ترقية باقته ذاتياً.
+- إنشاء Webhook يستقبل أحداث الدفع ويُحدث حقل `plan` تلقائياً.
+
+---
+
+## 📊 ملخص المراحل والجدول الزمني
+
+| المرحلة       | الوصف                             | عدد البنود | الجهد التقديري |
+| :------------ | :-------------------------------- | :--------- | :------------- |
+| **المرحلة 1** | الأمان والأساسيات الحرجة          | 4 بنود     | 1-2 يوم        |
+| **المرحلة 2** | تجربة المستخدم والتفاعلية         | 4 بنود     | 2-3 أيام       |
+| **المرحلة 3** | سلامة البيانات والعمل بدون إنترنت | 3 بنود     | 2-3 أيام       |
+| **المرحلة 4** | تقوية الإنتاج والجاهزية           | 4 بنود     | 1-2 يوم        |
+| **المرحلة 5** | النمو والتوسع المستقبلي           | 3 بنود     | حسب الحاجة     |
+
+---
+
+## خطة التحقق (Verification Plan)
+
+### الاختبارات الآلية
+
+- `npm run lint` (TypeScript type check) بعد كل مرحلة.
+- `npm run build` للتأكد من صحة البناء الإنتاجي.
+- `npx cap sync` للتأكد من توافق تطبيقات الهواتف.
+
+### الاختبارات اليدوية
+
+- اختبار استعادة كلمة المرور بحساب حقيقي.
+- اختبار الإشعارات على متصفح ويب وهاتف أندرويد.
+- اختبار فتح التطبيق بدون إنترنت والتأكد من ظهور البيانات المخزنة مؤقتاً.
+- اختبار محاولة إضافة موظف يتجاوز الحد الأقصى.
+- اختبار تعطيل شركة والتأكد من حظر مستخدميها فوراً.
+
+> [!IMPORTANT]
+> **هل توافق على هذه الخطة التنفيذية؟ وهل ترغب في البدء بالمرحلة الأولى (الأمان والأساسيات الحرجة) فوراً؟**
+>
+> يمكنك أيضاً إعادة ترتيب الأولويات أو حذف/إضافة بنود حسب رؤيتك.

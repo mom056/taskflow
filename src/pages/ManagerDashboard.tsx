@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, TaskStatus, statusLabels, statusColors, User } from '../types';
-import { LogOut, FileText, Search, Plus, MapPin, Calendar, User as UserIcon, ChevronLeft, Map, Edit2, Trash2 } from 'lucide-react';
+import { LogOut, FileText, Search, Plus, MapPin, Calendar, User as UserIcon, ChevronLeft, Map, Edit2, Trash2, Clock, UserPlus, Settings, CheckCircle, History } from 'lucide-react';
+import { useActivityLog } from '../hooks/useActivityLog';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskMap from '../components/TaskMap';
@@ -25,14 +26,17 @@ import TaskStatusDonut from '../components/charts/TaskStatusDonut';
 import { useReportExport } from '../hooks/useReportExport';
 
 import { useBackButton } from '../hooks/useBackButton';
+import { useTranslation } from '../contexts/LanguageContext';
 
 export default function ManagerDashboard() {
   const { signOut, user, profile, company } = useAuth();
+  const { logActivity, activities, isLoading: isActivityLoading } = useActivityLog();
+  const { t, language } = useTranslation();
 
   const queryClient = useQueryClient();
-  const { tasks, isLoading: tasksLoading, isError: tasksErrorObj, error: tasksError } = useTasks();
-  const { users: employees, isLoading: employeesLoading, isError: usersErrorObj, error: usersError } = useUsers('employee');
-  const { visits, isLoading: visitsLoading, isError: visitsErrorObj, error: visitsError } = useVisits();
+  const { tasks, isLoading: tasksLoading, isError: tasksErrorObj } = useTasks();
+  const { users: employees, isLoading: employeesLoading, isError: usersErrorObj } = useUsers('employee');
+  const { visits, isLoading: visitsLoading, isError: visitsErrorObj } = useVisits();
 
   // Map each employee ID to their active task if they are currently working on one (status = in_progress)
   const employeeActiveTasks = useMemo(() => {
@@ -45,7 +49,7 @@ export default function ManagerDashboard() {
     return activeMap;
   }, [tasks]);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity'>('overview');
 
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -57,18 +61,21 @@ export default function ManagerDashboard() {
   const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
   const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isLogoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editEmpName, setEditEmpName] = useState('');
   const [editEmpEmail, setEditEmpEmail] = useState('');
   const [editEmpPassword, setEditEmpPassword] = useState('');
-  const [editEmpRole, setEditEmpRole] = useState<'manager' | 'employee'>('employee');
+  const [editEmpRole, setEditEmpRole] = useState<'employee' | 'super_admin' | 'manager'>('employee');
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [visitsView, setVisitsView] = useState<'list' | 'map'>('list');
 
-  const isLoading = tasksLoading || employeesLoading || visitsLoading;
+  const isLoading = tasksLoading || employeesLoading || visitsLoading || isActivityLoading;
 
   const openTaskDetails = (task: Task) => {
     setViewingTask(task);
@@ -96,97 +103,184 @@ export default function ManagerDashboard() {
     return false; // Exit app
   }, 10, true);
 
+  // Realtime updates
   useEffect(() => {
-    const tasksSub = supabase.channel('manager_tasks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+    if (!profile?.company_id) return;
+    const sub = supabase
+      .channel('manager_db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${profile.company_id}` }, () => {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      }).subscribe();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `company_id=eq.${profile.company_id}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ['users'] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [profile?.company_id, queryClient]);
 
-    const visitsSub = supabase.channel('manager_visits')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['visits'] });
-      }).subscribe();
+  // Filters logic
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = 
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.location || '').toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
+      const matchesEmployee = employeeFilter === 'all' || task.employeeId === employeeFilter;
 
-    return () => {
-      supabase.removeChannel(tasksSub);
-      supabase.removeChannel(visitsSub);
-    };
-  }, [queryClient]);
+      let matchesDate = true;
+      if (startDate) {
+        const start = new Date(startDate).getTime();
+        matchesDate = matchesDate && task.createdAt >= start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && task.createdAt <= end.getTime();
+      }
 
-  const handleDeleteTask = async (task: Task) => {
-    toast(
-      (t) => (
-        <div className="text-sm" dir="rtl">
-          <p className="font-semibold mb-2">هل تريد حذف: <span className="text-red-600">{task.title}</span>؟</p>
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                toast.dismiss(t.id);
-                try {
-                  const { error } = await supabase.from('tasks').delete().eq('id', task.id);
-                  if (error) throw error;
-                  queryClient.invalidateQueries({ queryKey: ['tasks'] });
-                  toast.success('تم حذف المهمة بنجاح');
-                } catch {
-                  toast.error('تعذر حذف المهمة، يرجى المحاولة مجدداً');
-                }
-              }}
-              className="bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-semibold hover:bg-red-600"
-            >
-              حذف
-            </button>
-            <button
-              onClick={() => toast.dismiss(t.id)}
-              className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-xs font-semibold hover:bg-slate-200"
-            >
-              إلغاء
-            </button>
-          </div>
-        </div>
-      ),
-      { duration: 6000 }
-    );
+      return matchesSearch && matchesStatus && matchesEmployee && matchesDate;
+    });
+  }, [tasks, searchQuery, statusFilter, employeeFilter, startDate, endDate]);
+
+  const dateFilteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      let matchesDate = true;
+      if (startDate) {
+        const start = new Date(startDate).getTime();
+        matchesDate = matchesDate && task.createdAt >= start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && task.createdAt <= end.getTime();
+      }
+      return matchesDate;
+    });
+  }, [tasks, startDate, endDate]);
+
+  // Report statistics
+  const stats = useMemo(() => {
+    const total = filteredTasks.length;
+    const completed = filteredTasks.filter(t => t.status === 'completed').length;
+    const inProgress = filteredTasks.filter(t => t.status === 'in_progress').length;
+    const withLocation = filteredTasks.filter(t => t.location).length;
+
+    return { total, completed, inProgress, withLocation };
+  }, [filteredTasks]);
+
+  const completionRate = useMemo(() => {
+    const total = dateFilteredTasks.length;
+    if (total === 0) return 0;
+    const completed = dateFilteredTasks.filter(t => t.status === 'completed').length;
+    return Math.round((completed / total) * 100);
+  }, [dateFilteredTasks]);
+
+  const topEmployee = useMemo(() => {
+    if (employees.length === 0) return language === 'ar' ? 'لا يوجد' : 'None';
+    const counts: Record<string, number> = {};
+    dateFilteredTasks.forEach(t => {
+      if (t.status === 'completed' && t.employeeId) {
+        counts[t.employeeId] = (counts[t.employeeId] || 0) + 1;
+      }
+    });
+    let max = -1;
+    let topId = '';
+    Object.entries(counts).forEach(([id, count]) => {
+      if (count > max) {
+        max = count;
+        topId = id;
+      }
+    });
+    const found = employees.find(e => e.id === topId);
+    return found ? found.name : (language === 'ar' ? 'لا يوجد' : 'None');
+  }, [dateFilteredTasks, employees, language]);
+
+  const getEmployeeName = (id: string | null) => {
+    if (!id) return language === 'ar' ? 'غير مسندة' : 'Unassigned';
+    const found = employees.find(e => e.id === id);
+    return found ? found.name : (language === 'ar' ? 'موظف محذوف' : 'Deleted employee');
   };
 
+  const getStatusLabel = (status: TaskStatus) => {
+    if (language === 'en') {
+      const labels: Record<TaskStatus, string> = {
+        new: 'New',
+        pending: 'Pending',
+        in_progress: 'In Progress',
+        completed: 'Completed',
+      };
+      return labels[status];
+    }
+    return statusLabels[status];
+  };
+
+  const openAddTask = () => { setSelectedTask(null); setTaskModalOpen(true); };
+  const openEditTask = (task: Task) => { setSelectedTask(task); setTaskModalOpen(true); };
+
+  const handleDeleteTask = async (task: Task) => {
+    const confirmed = window.confirm(language === 'ar' ? `هل أنت متأكد من حذف المهمة "${task.title}"؟` : `Are you sure you want to delete "${task.title}"?`);
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+      if (error) throw error;
+      logActivity('task_deleted', 'task', task.id, { title: task.title });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success(language === 'ar' ? 'تم حذف المهمة بنجاح' : 'Task deleted successfully');
+    } catch (err: any) {
+      toast.error(err.message || (language === 'ar' ? 'تعذر حذف المهمة' : 'Could not delete task'));
+    }
+  };
+
+  // Employee Edit / Update / Delete handlers
   const openEditEmployee = (emp: User) => {
     setSelectedEmployee(emp);
     setEditEmpName(emp.name);
     setEditEmpEmail(emp.email);
-    setEditEmpRole(emp.role === 'super_admin' ? 'manager' : emp.role);
-    setEditEmpPassword(''); // Reset password field
+    setEditEmpRole(emp.role);
+    setEditEmpPassword('');
     setEmployeeModalOpen(true);
   };
 
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editEmpName.trim() || !editEmpEmail.trim()) {
-      return toast.error('يرجى ملء الاسم والبريد الإلكتروني');
-    }
-    if (editEmpPassword && editEmpPassword.length < 6) {
-      return toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-    }
-
+    if (!selectedEmployee) return;
     setUpdatingEmployee(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          action: 'update',
-          userId: selectedEmployee.id,
-          name: editEmpName,
-          email: editEmpEmail,
-          role: editEmpRole,
-          password: editEmpPassword ? editEmpPassword : undefined
-        }
-      });
+      const cleanEmail = editEmpEmail.trim().toLowerCase();
+      
+      const { error: profileError } = await supabase
+        .from('users')
+        .update({ name: editEmpName, email: cleanEmail, role: editEmpRole })
+        .eq('id', selectedEmployee.id);
+      if (profileError) throw profileError;
 
-      if (error) throw new Error(error.message || 'فشل تحديث بيانات الموظف');
-      if (data?.error) throw new Error(data.error);
+      // Update Auth email if changed
+      if (cleanEmail !== selectedEmployee.email.toLowerCase()) {
+        const { error: authEmailError } = await supabase.rpc('admin_update_user_email', {
+          user_uuid: selectedEmployee.id,
+          new_email: cleanEmail
+        });
+        if (authEmailError) throw authEmailError;
+      }
 
-      toast.success('تم تحديث بيانات الموظف بنجاح');
+      // Update Auth password if provided
+      if (editEmpPassword.trim()) {
+        const { error: authPassError } = await supabase.rpc('admin_update_user_password', {
+          user_uuid: selectedEmployee.id,
+          new_password: editEmpPassword.trim()
+        });
+        if (authPassError) throw authPassError;
+      }
+
+      logActivity('employee_updated', 'employee', selectedEmployee.id, { name: editEmpName });
+      toast.success(language === 'ar' ? 'تم تحديث بيانات الموظف بنجاح' : 'Employee details updated successfully');
       setEmployeeModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
-      toast.error(err.message || 'فشل تحديث بيانات الموظف');
+      console.error('[Update Employee]', err);
+      toast.error(err.message || (language === 'ar' ? 'حدث خطأ أثناء تحديث بيانات الموظف' : 'An error occurred while updating employee'));
     } finally {
       setUpdatingEmployee(false);
     }
@@ -201,95 +295,53 @@ export default function ManagerDashboard() {
     if (!selectedEmployee) return;
     setUpdatingEmployee(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          action: 'delete',
-          userId: selectedEmployee.id
-        }
+      const { error: dbError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', selectedEmployee.id);
+      if (dbError) throw dbError;
+
+      const { error: authError } = await supabase.rpc('admin_delete_auth_user', {
+        user_uuid: selectedEmployee.id
       });
+      if (authError) throw authError;
 
-      if (error) throw new Error(error.message || 'فشل حذف الموظف');
-      if (data?.error) throw new Error(data.error);
-
-      toast.success('تم حذف الموظف بنجاح');
+      logActivity('employee_deleted', 'employee', selectedEmployee.id, { name: selectedEmployee.name });
+      toast.success(language === 'ar' ? 'تم حذف الموظف نهائياً بنجاح' : 'Employee deleted successfully');
       setDeleteConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
-      toast.error(err.message || 'فشل حذف الموظف');
+      console.error('[Delete Employee]', err);
+      toast.error(err.message || (language === 'ar' ? 'تعذر حذف حساب الموظف' : 'Could not delete employee account'));
     } finally {
       setUpdatingEmployee(false);
     }
   };
 
-  const getEmployeeName = (id: string) => employees.find(e => e.id === id)?.name || 'غير معروف';
-
-  const completionRate = useMemo(() => {
-    if (tasks.length === 0) return 0;
-    const completed = tasks.filter(t => t.status === 'completed').length;
-    return Math.round((completed / tasks.length) * 100);
-  }, [tasks]);
-
-  const topEmployee = useMemo(() => {
-    if (tasks.length === 0 || employees.length === 0) return 'لا يوجد';
-    const completedCounts: Record<string, number> = {};
-    tasks.filter(t => t.status === 'completed').forEach(t => {
-      completedCounts[t.employeeId] = (completedCounts[t.employeeId] || 0) + 1;
-    });
-    let topEmpId = '';
-    let maxCompleted = -1;
-    Object.entries(completedCounts).forEach(([empId, count]) => {
-      if (count > maxCompleted) {
-        maxCompleted = count;
-        topEmpId = empId;
-      }
-    });
-    if (!topEmpId) return 'لا يوجد';
-    return employees.find(e => e.id === topEmpId)?.name || 'غير معروف';
-  }, [tasks, employees]);
-
-  const { exportPDF, printReportHTML } = useReportExport({ tasks, getEmployeeName });
-
-  const stats = {
-    total: tasks.length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-    inProgress: tasks.filter(t => t.status === 'in_progress').length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    withLocation: tasks.filter(t => t.location).length,
-  };
-
-  const filteredTasks = tasks.filter(task => {
-    const employeeName = getEmployeeName(task.employeeId);
-    const matchesSearch = !searchQuery ||
-      task.title.includes(searchQuery) ||
-      (task.description && task.description.includes(searchQuery)) ||
-      (task.location && task.location.includes(searchQuery)) ||
-      employeeName.includes(searchQuery);
-    const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
-    const matchesEmployee = employeeFilter === 'all' || task.employeeId === employeeFilter;
-    return matchesSearch && matchesStatus && matchesEmployee;
+  // Export & Print report functions
+  const { printReportHTML, exportPDF } = useReportExport({
+    tasks: filteredTasks,
+    getEmployeeName: (id: string | null) => getEmployeeName(id),
   });
 
   const exportToExcel = () => {
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
-      + "العنوان,الوصف,الموظف,المكان,تاريخ التنفيذ,الحالة,تاريخ الإنشاء\n"
+      + (language === 'ar' 
+        ? "العنوان,الوصف,الموظف,المكان,تاريخ التنفيذ,الحالة,تاريخ الإنشاء\n"
+        : "Title,Description,Employee,Location,Due Date,Status,Created At\n")
       + filteredTasks.map(t =>
-        `"${t.title}","${t.description || ''}","${getEmployeeName(t.employeeId)}","${t.location || ''}","${t.dueDate ? format(t.dueDate, 'yyyy/MM/dd') : ''}","${statusLabels[t.status]}","${format(t.createdAt, 'yyyy/MM/dd')}"`
+        `"${t.title}","${t.description || ''}","${getEmployeeName(t.employeeId)}","${t.location || ''}","${t.dueDate ? format(t.dueDate, 'yyyy/MM/dd') : ''}","${getStatusLabel(t.status)}","${format(t.createdAt, 'yyyy/MM/dd')}"`
       ).join("\n");
 
     const link = document.createElement("a");
     link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `تقرير_المهام_${format(Date.now(), 'yyyy-MM-dd')}.csv`);
+    link.setAttribute("download", language === 'ar' ? `تقرير_المهام_${format(Date.now(), 'yyyy-MM-dd')}.csv` : `Tasks_Report_${format(Date.now(), 'yyyy-MM-dd')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const openAddTask = () => { setSelectedTask(null); setTaskModalOpen(true); };
-  const openEditTask = (task: Task) => { setSelectedTask(task); setTaskModalOpen(true); };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Mobile task card component (inline)
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Mobile task card component
   const MobileTaskCard = ({ task }: { task: Task }) => (
     <div 
       onClick={() => openTaskDetails(task)}
@@ -298,7 +350,7 @@ export default function ManagerDashboard() {
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-slate-900 text-sm leading-snug flex-1">{task.title}</h3>
         <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
-          {statusLabels[task.status]}
+          {getStatusLabel(task.status)}
         </span>
       </div>
 
@@ -328,38 +380,50 @@ export default function ManagerDashboard() {
       <div className="flex gap-2 pt-1 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => openEditTask(task)}
-          className="flex-1 py-2 rounded-xl text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+          className="flex-1 py-2 rounded-xl text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border-none cursor-pointer"
         >
-          تعديل
+          {language === 'ar' ? 'تعديل' : 'Edit'}
         </button>
         <button
           onClick={() => handleDeleteTask(task)}
-          className="flex-1 py-2 rounded-xl text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+          className="flex-1 py-2 rounded-xl text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors border-none cursor-pointer"
         >
-          حذف
+          {language === 'ar' ? 'حذف' : 'Delete'}
         </button>
       </div>
     </div>
   );
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Tab content sections
-  // ─────────────────────────────────────────────────────────────────────────────
-  const tabTitle: Record<typeof activeTab, string> = {
-    overview: 'نظرة عامة',
-    tasks: 'إدارة المهام',
-    visits: 'سجل الزيارات',
-    employees: 'فريق العمل',
-    analytics: 'التحليلات والتقارير'
+  const getTabTitle = (tab: typeof activeTab) => {
+    if (language === 'en') {
+      const titles: Record<typeof activeTab, string> = {
+        overview: 'Overview',
+        tasks: 'Task Management',
+        visits: 'Visit Logs',
+        employees: 'Work Team',
+        activity: 'Activity Logs',
+        analytics: 'Analytics & Reports'
+      };
+      return titles[tab];
+    }
+    const titles: Record<typeof activeTab, string> = {
+      overview: 'نظرة عامة',
+      tasks: 'إدارة المهام',
+      visits: 'سجل الزيارات',
+      employees: 'فريق العمل',
+      activity: 'سجل العمليات',
+      analytics: 'التحليلات والتقارير'
+    };
+    return titles[tab];
   };
 
   return (
-    <div className="flex h-screen w-screen bg-slate-50 font-sans overflow-hidden text-slate-900" dir="rtl">
+    <div className="flex h-screen w-screen bg-slate-50 font-sans overflow-hidden text-slate-900" dir={language === 'ar' ? 'rtl' : 'ltr'}>
 
       {/* ── DESKTOP SIDEBAR ── */}
-      <aside className="w-[240px] bg-white border-l border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex">
+      <aside className={`w-[240px] bg-white ${language === 'ar' ? 'border-l' : 'border-r'} border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex`}>
         <div className="mb-10">
-          <div className="text-2xl font-bold text-blue-600">TaskFlow</div>
+          <div className="text-2xl font-bold text-blue-600">{t.common.appName}</div>
           {company && (
             <div className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
               <span>{company.name}</span>
@@ -369,25 +433,40 @@ export default function ManagerDashboard() {
         </div>
 
         <nav className="flex flex-col flex-1 gap-1">
-          {(['overview', 'tasks', 'visits', 'employees', 'analytics'] as const).map(tab => {
-            const labels = { 
-              overview: 'لوحة التحكم', 
-              tasks: 'المهام اليومية', 
-              visits: 'سجل الزيارات', 
-              employees: 'الموظفين',
-              analytics: 'التحليلات والتقارير'
+          {(['overview', 'tasks', 'visits', 'employees', 'activity', 'analytics'] as const).map(tab => {
+            const getSidebarLabel = (tId: typeof tab) => {
+              if (language === 'en') {
+                const labelsEn: Record<typeof tab, string> = {
+                  overview: 'Dashboard',
+                  tasks: 'Daily Tasks',
+                  visits: 'Visit Logs',
+                  employees: 'Employees',
+                  activity: 'Activity Logs',
+                  analytics: 'Analytics & Reports'
+                };
+                return labelsEn[tId];
+              }
+              const labelsAr: Record<typeof tab, string> = {
+                overview: 'لوحة التحكم',
+                tasks: 'المهام اليومية',
+                visits: 'سجل الزيارات',
+                employees: 'الموظفين',
+                activity: 'سجل العمليات',
+                analytics: 'التحليلات والتقارير'
+              };
+              return labelsAr[tId];
             };
             return (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none transition-all duration-200 ${
+                className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none transition-all duration-200 cursor-pointer ${
                   activeTab === tab
-                    ? 'bg-blue-50 text-blue-600 shadow-sm'
+                    ? 'bg-blue-50 text-blue-600 shadow-xs'
                     : 'text-slate-500 hover:bg-slate-50 bg-transparent hover:text-slate-800'
                 }`}
               >
-                {labels[tab]}
+                {getSidebarLabel(tab)}
               </button>
             );
           })}
@@ -395,24 +474,24 @@ export default function ManagerDashboard() {
 
         <div className="mt-auto pt-4 border-t border-slate-200 space-y-3">
           <Link to="/profile" className="flex items-center gap-3 hover:bg-slate-50 p-2 rounded-xl transition-colors cursor-pointer text-slate-800 decoration-none no-underline">
-            <div className="w-9 h-9 bg-linear-to-br from-blue-500 to-blue-700 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-blue-100">
+            <div className="w-9 h-9 bg-linear-to-br from-blue-50 to-blue-700 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-blue-100">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="المدير" className="w-full h-full object-cover" />
+                <img src={profile.avatar_url} alt="Manager" className="w-full h-full object-cover" />
               ) : (
                 (profile?.name || user?.email || 'م')[0].toUpperCase()
               )}
             </div>
             <div className="overflow-hidden">
               <div className="text-sm font-semibold truncate leading-tight">{profile?.name || user?.email?.split('@')[0] || 'المدير'}</div>
-              <div className="text-xs text-slate-400 mt-0.5">مدير النظام</div>
+              <div className="text-xs text-slate-400 mt-0.5">{language === 'ar' ? 'مدير النظام' : 'Manager'}</div>
             </div>
           </Link>
           <button
-            onClick={signOut}
-            className="flex items-center text-slate-500 hover:text-red-500 px-2 py-2 transition-colors w-full rounded-lg hover:bg-red-50"
+            onClick={() => setLogoutConfirmOpen(true)}
+            className="flex items-center text-slate-500 hover:text-red-500 px-2 py-2 transition-colors w-full rounded-lg hover:bg-red-50 cursor-pointer border-none bg-transparent"
           >
-            <LogOut className="w-4 h-4 ml-2" />
-            <span className="text-sm font-medium">تسجيل خروج</span>
+            <LogOut className={`w-4 h-4 ${language === 'ar' ? 'ml-2' : 'mr-2'}`} />
+            <span className="text-sm font-medium">{t.common.logout}</span>
           </button>
         </div>
       </aside>
@@ -421,23 +500,23 @@ export default function ManagerDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
 
         {/* ── MOBILE HEADER ── */}
-        <header className="md:hidden bg-white border-b border-slate-100 px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <header className="md:hidden bg-white border-b border-slate-100 px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <Link to="/profile" className="flex items-center gap-3 text-slate-800 decoration-none no-underline">
-            <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100">
+            <div className="w-8 h-8 bg-linear-to-br from-blue-50 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="المدير" className="w-full h-full object-cover" />
+                <img src={profile.avatar_url} alt="Manager" className="w-full h-full object-cover" />
               ) : (
                 (profile?.name || user?.email || 'م')[0].toUpperCase()
               )}
             </div>
             <div>
-              <div className="text-sm font-bold text-slate-900">{tabTitle[activeTab]}</div>
+              <div className="text-sm font-bold text-slate-900">{getTabTitle(activeTab)}</div>
               <div className="text-[10px] text-slate-400">
                 {profile?.name || user?.email?.split('@')[0]} {company ? `| ${company.name}` : ''}
               </div>
             </div>
           </Link>
-          <button onClick={signOut} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer border-none bg-transparent">
             <LogOut className="w-4 h-4 text-slate-500" />
           </button>
         </header>
@@ -445,19 +524,23 @@ export default function ManagerDashboard() {
         {/* ── DESKTOP HEADER ── */}
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-4 items-center justify-between shrink-0">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 m-0">{tabTitle[activeTab]}</h1>
-            <p className="text-slate-400 text-sm mt-0.5 m-0">متابعة سير العمل والمهام لـ {company?.name || 'المؤسسة'}</p>
+            <h1 className="text-xl font-bold text-slate-900 m-0">{getTabTitle(activeTab)}</h1>
+            <p className="text-slate-400 text-sm mt-0.5 m-0">
+              {language === 'ar' 
+                ? `متابعة سير العمل والمهام لـ ${company?.name || 'المؤسسة'}`
+                : `Monitor workflow and tasks for ${company?.name || 'the organization'}`}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             {(activeTab === 'overview' || activeTab === 'tasks') && (
               <>
-                <button onClick={exportToExcel} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 transition-colors">
+                <button onClick={exportToExcel} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer">
                   <FileText className="w-4 h-4" />
-                  تصدير CSV
+                  {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
                 </button>
-                <button onClick={openAddTask} className="bg-blue-600 text-white border-none py-2 px-5 rounded-xl font-semibold cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm shadow-blue-200">
+                <button onClick={openAddTask} className="bg-blue-600 text-white border-none py-2 px-5 rounded-xl font-semibold cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-xs shadow-blue-200">
                   <Plus className="w-4 h-4" />
-                  مهمة جديدة
+                  {language === 'ar' ? 'مهمة جديدة' : 'New Task'}
                 </button>
               </>
             )}
@@ -467,13 +550,13 @@ export default function ManagerDashboard() {
                   onClick={printReportHTML} 
                   className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  طباعة التقرير 🖨️
+                  {language === 'ar' ? 'طباعة التقرير 🖨️' : 'Print Report 🖨️'}
                 </button>
                 <button 
                   onClick={exportPDF} 
-                  className="bg-blue-600 text-white border-none py-2.5 px-5 rounded-xl font-semibold cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm shadow-blue-200"
+                  className="bg-blue-600 text-white border-none py-2.5 px-5 rounded-xl font-semibold cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-xs shadow-blue-200"
                 >
-                  تحميل PDF 📄
+                  {language === 'ar' ? 'تحميل PDF 📄' : 'Download PDF 📄'}
                 </button>
               </div>
             )}
@@ -483,7 +566,7 @@ export default function ManagerDashboard() {
         {/* ── SCROLLABLE CONTENT AREA ── */}
         <div className="flex-1 overflow-y-auto relative">
           {isLoading && (
-            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-xs z-20 flex items-center justify-center">
               <div className="rounded-full h-8 w-8 bg-blue-600 animate-ping" />
             </div>
           )}
@@ -494,11 +577,11 @@ export default function ManagerDashboard() {
                 <span className="text-amber-600 font-bold text-sm">!</span>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-800">تعذر جلب بعض البيانات</p>
-                <p className="text-xs text-amber-600 mt-0.5">يرجى التأكد من إعداد جداول قاعدة البيانات بشكل صحيح</p>
+                <p className="text-sm font-semibold text-amber-800">{language === 'ar' ? 'تعذر جلب بعض البيانات' : 'Could not fetch some data'}</p>
+                <p className="text-xs text-amber-600 mt-0.5">{language === 'ar' ? 'يرجى التأكد من إعداد جداول قاعدة البيانات بشكل صحيح' : 'Please check your database schemas'}</p>
               </div>
               <button onClick={() => window.location.reload()} className="text-xs font-semibold text-amber-700 hover:text-amber-900 border-none bg-transparent cursor-pointer">
-                تحديث
+                {language === 'ar' ? 'تحديث' : 'Refresh'}
               </button>
             </div>
           )}
@@ -509,24 +592,24 @@ export default function ManagerDashboard() {
               {/* Stats Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
                 {[
-                  { label: 'إجمالي المهام', value: stats.total, color: 'text-slate-800', bg: 'bg-white' },
-                  { label: 'جاري العمل', value: stats.inProgress, color: 'text-amber-600', bg: 'bg-amber-50' },
-                  { label: 'المهام المكتملة', value: stats.completed, color: 'text-green-600', bg: 'bg-green-50' },
-                  { label: 'زيارات ميدانية', value: stats.withLocation, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: language === 'ar' ? 'إجمالي المهام' : 'Total Tasks', value: stats.total, color: 'text-slate-800', bg: 'bg-white' },
+                  { label: language === 'ar' ? 'جاري العمل' : 'In Progress', value: stats.inProgress, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: language === 'ar' ? 'المهام المكتملة' : 'Completed Tasks', value: stats.completed, color: 'text-green-600', bg: 'bg-green-50' },
+                  { label: language === 'ar' ? 'زيارات ميدانية' : 'Field Visits', value: stats.withLocation, color: 'text-blue-600', bg: 'bg-blue-50' },
                 ].map(s => (
-                  <div key={s.label} className={`${s.bg} p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm`}>
+                  <div key={s.label} className={`${s.bg} p-4 md:p-6 rounded-2xl border border-slate-100 shadow-xs`}>
                     <p className="text-xs md:text-sm text-slate-500 font-medium">{s.label}</p>
                     <p className={`text-3xl md:text-4xl font-bold mt-1 ${s.color}`}>{s.value}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Recent Tasks — desktop: table, mobile: cards */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              {/* Recent Tasks */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center">
-                  <h2 className="text-base font-bold text-slate-800">آخر المهام</h2>
+                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'آخر المهام' : 'Recent Tasks'}</h2>
                   <button onClick={() => setActiveTab('tasks')} className="text-blue-600 text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
-                    عرض الكل <ChevronLeft className="w-3.5 h-3.5" />
+                    {language === 'ar' ? 'عرض الكل' : 'View All'} <ChevronLeft className={`w-3.5 h-3.5 ${language === 'en' ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
 
@@ -538,7 +621,7 @@ export default function ManagerDashboard() {
                 {/* Mobile cards */}
                 <div className="md:hidden p-4 space-y-3">
                   {tasks.slice(0, 5).map(task => <MobileTaskCard key={task.id} task={task} />)}
-                  {tasks.length === 0 && <p className="text-center text-slate-400 text-sm py-6">لا توجد مهام مسجلة حالياً</p>}
+                  {tasks.length === 0 && <p className="text-center text-slate-400 text-sm py-6">{language === 'ar' ? 'لا توجد مهام مسجلة حالياً' : 'No tasks registered yet'}</p>}
                 </div>
               </div>
             </div>
@@ -548,40 +631,70 @@ export default function ManagerDashboard() {
           {activeTab === 'tasks' && (
             <div className="p-4 md:p-8 space-y-4 pb-24 md:pb-8">
               {/* Filter bar */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col sm:flex-row gap-3">
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    placeholder="ابحث عن مهمة أو موظف..."
+                    placeholder={language === 'ar' ? 'ابحث عن مهمة أو موظف...' : 'Search task or employee...'}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full pl-3 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 focus:bg-white transition-colors"
                   />
-                  <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                  <Search className={`w-4 h-4 text-slate-400 absolute top-3 ${language === 'ar' ? 'right-3' : 'left-3'}`} />
                 </div>
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value as TaskStatus | 'all')}
-                  className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
-                >
-                  <option value="all">كل الحالات</option>
-                  <option value="new">جديدة</option>
-                  <option value="in_progress">جاري العمل</option>
-                  <option value="completed">مكتملة</option>
-                  <option value="pending">معلقة</option>
-                </select>
-                <select
-                  value={employeeFilter}
-                  onChange={e => setEmployeeFilter(e.target.value)}
-                  className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
-                >
-                  <option value="all">كل الموظفين</option>
-                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                </select>
+                <div className="grid grid-cols-2 sm:flex gap-3">
+                  <select
+                    value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value as TaskStatus | 'all')}
+                    className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                  >
+                    <option value="all">{language === 'ar' ? 'كل الحالات' : 'All Statuses'}</option>
+                    <option value="new">{language === 'ar' ? 'جديدة' : 'New'}</option>
+                    <option value="in_progress">{language === 'ar' ? 'جاري العمل' : 'In Progress'}</option>
+                    <option value="completed">{language === 'ar' ? 'مكتملة' : 'Completed'}</option>
+                    <option value="pending">{language === 'ar' ? 'معلقة' : 'Pending'}</option>
+                  </select>
+                  <select
+                    value={employeeFilter}
+                    onChange={e => setEmployeeFilter(e.target.value)}
+                    className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                  >
+                    <option value="all">{language === 'ar' ? 'كل الموظفين' : 'All Employees'}</option>
+                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <div className="flex gap-2 items-center">
+                    <span className="text-xs text-slate-500 font-semibold shrink-0">{language === 'ar' ? 'من:' : 'From:'}</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      className="border border-slate-200 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-xs text-slate-500 font-semibold shrink-0">{language === 'ar' ? 'إلى:' : 'To:'}</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      className="border border-slate-200 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                    />
+                  </div>
+                  {(startDate || endDate) && (
+                    <button
+                      onClick={() => { setStartDate(''); setEndDate(''); }}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-100 border-none cursor-pointer transition-colors"
+                    >
+                      {language === 'ar' ? 'تصفير التواريخ' : 'Reset Dates'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Desktop table */}
-              <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
                 <TasksTable tasks={filteredTasks} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} onView={openTaskDetails} />
               </div>
 
@@ -589,8 +702,8 @@ export default function ManagerDashboard() {
               <div className="md:hidden space-y-3">
                 {filteredTasks.map(task => <MobileTaskCard key={task.id} task={task} />)}
                 {filteredTasks.length === 0 && (
-                  <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100">
-                    لا توجد مهام مطابقة
+                  <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100 shadow-xs">
+                    {language === 'ar' ? 'لا توجد مهام مطابقة' : 'No matching tasks'}
                   </div>
                 )}
               </div>
@@ -601,20 +714,20 @@ export default function ManagerDashboard() {
           {activeTab === 'employees' && (
             <div className="p-4 md:p-8 pb-24 md:pb-8">
               {/* Desktop table */}
-              <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-50">
-                  <h2 className="text-base font-bold text-slate-800">قائمة الموظفين</h2>
+                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'قائمة الموظفين' : 'Employees List'}</h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
-                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الاسم</th>
-                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">البريد الإلكتروني</th>
-                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الدور الوظيفي</th>
-                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">الحالة الحالية</th>
-                        <th className="text-right p-4 border-b border-slate-100 text-slate-400 text-sm font-medium">تاريخ الانضمام</th>
-                        <th className="text-center p-4 border-b border-slate-100 text-slate-400 text-sm font-medium w-32">الإجراءات</th>
+                        <th className={`${language === 'ar' ? 'text-right' : 'text-left'} p-4 border-b border-slate-100 text-slate-400 text-sm font-medium`}>{language === 'ar' ? 'الاسم' : 'Name'}</th>
+                        <th className={`${language === 'ar' ? 'text-right' : 'text-left'} p-4 border-b border-slate-100 text-slate-400 text-sm font-medium`}>{language === 'ar' ? 'البريد الإلكتروني' : 'Email'}</th>
+                        <th className={`${language === 'ar' ? 'text-right' : 'text-left'} p-4 border-b border-slate-100 text-slate-400 text-sm font-medium`}>{language === 'ar' ? 'الدور الوظيفي' : 'Role'}</th>
+                        <th className={`${language === 'ar' ? 'text-right' : 'text-left'} p-4 border-b border-slate-100 text-slate-400 text-sm font-medium`}>{language === 'ar' ? 'الحالة الحالية' : 'Current Status'}</th>
+                        <th className={`${language === 'ar' ? 'text-right' : 'text-left'} p-4 border-b border-slate-100 text-slate-400 text-sm font-medium`}>{language === 'ar' ? 'تاريخ الانضمام' : 'Join Date'}</th>
+                        <th className="text-center p-4 border-b border-slate-100 text-slate-400 text-sm font-medium w-32">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -622,14 +735,14 @@ export default function ManagerDashboard() {
                         const activeTask = employeeActiveTasks[emp.id];
                         const isSelf = emp.id === user?.id;
                         return (
-                          <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                           <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 border-b border-slate-50 text-sm font-semibold text-slate-900">{emp.name}</td>
                             <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{emp.email}</td>
                             <td className="p-4 border-b border-slate-50 text-sm">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
                                 emp.role === 'manager' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-700 border border-slate-100'
                               }`}>
-                                {emp.role === 'manager' ? 'مدير' : 'موظف'}
+                                {emp.role === 'manager' ? (language === 'ar' ? 'مدير' : 'Manager') : (language === 'ar' ? 'موظف' : 'Employee')}
                               </span>
                             </td>
                             <td className="p-4 border-b border-slate-50 text-sm">
@@ -639,12 +752,12 @@ export default function ManagerDashboard() {
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                   </span>
-                                  في مهمة: <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
+                                  {language === 'ar' ? 'في مهمة:' : 'Working on:'} <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                                   <span className="h-2 w-2 rounded-full bg-slate-400"></span>
-                                  متاح
+                                  {language === 'ar' ? 'متاح' : 'Available'}
                                 </span>
                               )}
                             </td>
@@ -654,7 +767,7 @@ export default function ManagerDashboard() {
                                 <button
                                   onClick={() => openEditEmployee(emp)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 border-none bg-transparent rounded-lg transition-colors cursor-pointer"
-                                  title="تعديل بيانات الموظف"
+                                  title={language === 'ar' ? 'تعديل بيانات الموظف' : 'Edit Employee'}
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
@@ -662,7 +775,7 @@ export default function ManagerDashboard() {
                                   <button
                                     onClick={() => openDeleteEmployee(emp)}
                                     className="p-1.5 text-rose-600 hover:bg-rose-50 border-none bg-transparent rounded-lg transition-colors cursor-pointer"
-                                    title="حذف الموظف نهائياً"
+                                    title={language === 'ar' ? 'حذف الموظف نهائياً' : 'Delete Employee'}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -673,7 +786,7 @@ export default function ManagerDashboard() {
                         );
                       })}
                       {employees.length === 0 && (
-                        <tr><td colSpan={6} className="p-6 text-center text-slate-400">لا يوجد موظفون مسجلون</td></tr>
+                        <tr><td colSpan={6} className="p-6 text-center text-slate-400">{language === 'ar' ? 'لا يوجد موظفون مسجلون' : 'No registered employees'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -686,7 +799,7 @@ export default function ManagerDashboard() {
                   const activeTask = employeeActiveTasks[emp.id];
                   const isSelf = emp.id === user?.id;
                   return (
-                    <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-3">
+                    <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-xs p-4 flex flex-col gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-linear-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
                           {emp.name?.[0]?.toUpperCase() || '؟'}
@@ -699,28 +812,28 @@ export default function ManagerDashboard() {
                       </div>
 
                       <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
-                        <span className="text-xs text-slate-400">الدور الوظيفي</span>
+                        <span className="text-xs text-slate-400">{language === 'ar' ? 'الدور الوظيفي' : 'Role'}</span>
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           emp.role === 'manager' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-700 border border-slate-100'
                         }`}>
-                          {emp.role === 'manager' ? 'مدير' : 'موظف'}
+                          {emp.role === 'manager' ? (language === 'ar' ? 'مدير' : 'Manager') : (language === 'ar' ? 'موظف' : 'Employee')}
                         </span>
                       </div>
 
                       <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
-                        <span className="text-xs text-slate-400">الحالة الميدانية</span>
+                        <span className="text-xs text-slate-400">{language === 'ar' ? 'الحالة الميدانية' : 'Field Status'}</span>
                         {activeTask ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
                             <span className="relative flex h-1.5 w-1.5">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                             </span>
-                            في مهمة: <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
+                            {language === 'ar' ? 'في مهمة:' : 'In task:'} <span className="font-bold truncate max-w-[120px]">{activeTask.title}</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
-                            متاح
+                            {language === 'ar' ? 'متاح' : 'Available'}
                           </span>
                         )}
                       </div>
@@ -731,7 +844,7 @@ export default function ManagerDashboard() {
                           className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-xl transition-colors cursor-pointer"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
-                          تعديل
+                          {language === 'ar' ? 'تعديل' : 'Edit'}
                         </button>
                         {!isSelf && (
                           <button
@@ -739,7 +852,7 @@ export default function ManagerDashboard() {
                             className="flex items-center gap-1 px-3 py-1.5 text-xs text-rose-600 bg-rose-50/50 hover:bg-rose-50 border border-rose-100 rounded-xl transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            حذف
+                            {language === 'ar' ? 'حذف' : 'Delete'}
                           </button>
                         )}
                       </div>
@@ -747,20 +860,20 @@ export default function ManagerDashboard() {
                   );
                 })}
                 {employees.length === 0 && (
-                  <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100">
-                    لا يوجد موظفون مسجلون
+                  <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100 shadow-xs">
+                    {language === 'ar' ? 'لا يوجد موظفون مسجلون' : 'No registered employees'}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* ══ VISITS (field tasks with location) ══ */}
+          {/* ══ VISITS ══ */}
           {activeTab === 'visits' && (
             <div className="p-4 md:p-8 pb-24 md:pb-8">
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between flex-wrap gap-3">
-                  <h2 className="text-base font-bold text-slate-800">سجل الزيارات الميدانية</h2>
+                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'سجل الزيارات الميدانية' : 'Field Visits Log'}</h2>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setVisitsView('list')}
@@ -770,7 +883,7 @@ export default function ManagerDashboard() {
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      قائمة الزيارات
+                      {language === 'ar' ? 'قائمة الزيارات' : 'Visits List'}
                     </button>
                     <button
                       onClick={() => setVisitsView('map')}
@@ -781,19 +894,19 @@ export default function ManagerDashboard() {
                       }`}
                     >
                       <Map className="w-3.5 h-3.5" />
-                      الخريطة التفاعلية
+                      {language === 'ar' ? 'الخريطة التفاعلية' : 'Interactive Map'}
                     </button>
                   </div>
                   <span className="text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full font-medium">
-                    {tasks.filter(t => t.location).length} زيارة
+                    {tasks.filter(t => t.location).length} {language === 'ar' ? 'زيارة' : 'visits'}
                   </span>
                 </div>
                 <div className="p-4 space-y-3">
                   {visitsView === 'map' ? (
-                    <TaskMap tasks={tasks} getEmployeeName={getEmployeeName} />
+                    <TaskMap tasks={filteredTasks} getEmployeeName={getEmployeeName} />
                   ) : (
-                    tasks.filter(t => t.location).length > 0 ? (
-                      tasks.filter(t => t.location).map(task => (
+                    filteredTasks.filter(t => t.location).length > 0 ? (
+                      filteredTasks.filter(t => t.location).map(task => (
                         <div key={task.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2.5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
@@ -803,16 +916,16 @@ export default function ManagerDashboard() {
                             <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                               {task.startLatitude && (
                                 <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
-                                  بدء موثق
+                                  {language === 'ar' ? 'بدء موثق' : 'Verified Start'}
                                 </span>
                               )}
                               {task.latitude && (
                                 <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">
-                                  إتمام موثق
+                                  {language === 'ar' ? 'إتمام موثق' : 'Verified Completion'}
                                 </span>
                               )}
                               <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${statusColors[task.status]}`}>
-                                {statusLabels[task.status]}
+                                {getStatusLabel(task.status)}
                               </span>
                             </div>
                           </div>
@@ -826,7 +939,7 @@ export default function ManagerDashboard() {
                                 onClick={() => openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${task.startLatitude},${task.startLongitude}`)}
                                 className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-semibold border-none cursor-pointer flex items-center gap-1 transition-colors"
                               >
-                                📌 موقع البدء (GPS)
+                                📌 {language === 'ar' ? 'موقع البدء (GPS)' : 'Start Location (GPS)'}
                               </button>
                             )}
                             {task.latitude && task.longitude && (
@@ -834,7 +947,7 @@ export default function ManagerDashboard() {
                                 onClick={() => openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${task.latitude},${task.longitude}`)}
                                 className="px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-[11px] font-semibold border-none cursor-pointer flex items-center gap-1 transition-colors"
                               >
-                                📍 موقع الإتمام (GPS)
+                                📍 {language === 'ar' ? 'موقع الإتمام (GPS)' : 'End Location (GPS)'}
                               </button>
                             )}
                           </div>
@@ -848,17 +961,109 @@ export default function ManagerDashboard() {
                                 openExternalUrl(task.imageUrl!);
                               }}
                               className="block overflow-hidden rounded-lg border border-slate-200 max-w-[200px]">
-                              <img src={task.imageUrl} alt="صورة الزيارة" className="w-full h-24 object-cover hover:scale-105 transition-transform" />
+                              <img src={task.imageUrl} alt="Visit" className="w-full h-24 object-cover hover:scale-105 transition-transform" />
                             </a>
                           )}
                           <div className="text-[10px] text-slate-400 pt-1">
-                            {task.createdAt ? new Date(task.createdAt).toLocaleDateString('ar-SA') : ''}
+                            {task.createdAt ? new Date(task.createdAt).toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US') : ''}
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-10 text-slate-400 text-sm">لا توجد زيارات ميدانية مسجلة</div>
+                      <div className="text-center py-10 text-slate-400 text-sm">{language === 'ar' ? 'لا توجد زيارات ميدانية مسجلة' : 'No registered field visits'}</div>
                     )
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ ACTIVITY LOG ══ */}
+          {activeTab === 'activity' && (
+            <div className="p-4 md:p-8 pb-24 md:pb-8">
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between flex-wrap gap-3">
+                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'سجل عمليات النظام (Audit Log)' : 'System Audit Log'}</h2>
+                  <span className="text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full font-medium">
+                    {activities.length} {language === 'ar' ? 'عملية مسجلة' : 'activities logged'}
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                  {activities.length > 0 ? (
+                    activities.map((act) => {
+                      let Icon = Clock;
+                      let iconColor = 'text-slate-500 bg-slate-50';
+                      let actionName = act.action;
+
+                      if (act.action === 'task_created') {
+                        Icon = Plus;
+                        iconColor = 'text-green-600 bg-green-50';
+                        actionName = language === 'ar' ? 'إنشاء مهمة جديدة' : 'Created new task';
+                      } else if (act.action === 'task_updated') {
+                        Icon = Edit2;
+                        iconColor = 'text-blue-600 bg-blue-50';
+                        actionName = language === 'ar' ? 'تعديل مهمة' : 'Updated task';
+                      } else if (act.action === 'task_deleted') {
+                        Icon = Trash2;
+                        iconColor = 'text-rose-600 bg-rose-50';
+                        actionName = language === 'ar' ? 'حذف مهمة' : 'Deleted task';
+                      } else if (act.action === 'employee_added') {
+                        Icon = UserPlus;
+                        iconColor = 'text-emerald-600 bg-emerald-50';
+                        actionName = language === 'ar' ? 'إضافة موظف جديد' : 'Added new employee';
+                      } else if (act.action === 'employee_updated') {
+                        Icon = UserIcon;
+                        iconColor = 'text-indigo-600 bg-indigo-50';
+                        actionName = language === 'ar' ? 'تعديل بيانات موظف' : 'Updated employee details';
+                      } else if (act.action === 'employee_deleted') {
+                        Icon = Trash2;
+                        iconColor = 'text-red-600 bg-red-50';
+                        actionName = language === 'ar' ? 'حذف موظف' : 'Deleted employee';
+                      } else if (act.action === 'company_settings_updated') {
+                        Icon = Settings;
+                        iconColor = 'text-amber-600 bg-amber-50';
+                        actionName = language === 'ar' ? 'تحديث إعدادات الشركة' : 'Updated settings';
+                      } else if (act.action === 'task_status_changed') {
+                        Icon = CheckCircle;
+                        iconColor = 'text-purple-600 bg-purple-50';
+                        actionName = language === 'ar' ? 'تغيير حالة المهمة' : 'Changed task status';
+                      }
+
+                      return (
+                        <div key={act.id} className="p-4 flex items-start gap-3 hover:bg-slate-50/50 transition-colors">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-800 text-sm">{actionName}</span>
+                              <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                                {format(new Date(act.createdAt), 'yyyy/MM/dd HH:mm')}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                              <span>{language === 'ar' ? 'بواسطة:' : 'By:'}</span>
+                              <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-sm">
+                                {act.actorName}
+                              </span>
+                              {act.metadata && Object.keys(act.metadata).length > 0 && (
+                                <>
+                                  <span className="text-slate-300">|</span>
+                                  <span>{language === 'ar' ? 'تفاصيل:' : 'Details:'}</span>
+                                  <span className="text-slate-600 font-medium">
+                                    {act.metadata.title || act.metadata.name || act.metadata.companyName || JSON.stringify(act.metadata)}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 text-slate-400 text-sm">
+                      {language === 'ar' ? 'لا توجد عمليات مسجلة في السجل حالياً' : 'No system activity logged yet'}
+                    </div>
                   )}
                 </div>
               </div>
@@ -874,43 +1079,43 @@ export default function ManagerDashboard() {
                   onClick={printReportHTML} 
                   className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  طباعة التقرير 🖨️
+                  {language === 'ar' ? 'طباعة التقرير 🖨️' : 'Print Report 🖨️'}
                 </button>
                 <button 
                   onClick={exportPDF} 
-                  className="flex-1 py-2.5 bg-blue-600 text-white border-none rounded-xl hover:bg-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+                  className="flex-1 py-2.5 bg-blue-600 text-white border-none rounded-xl hover:bg-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
                 >
-                  تحميل PDF 📄
+                  {language === 'ar' ? 'تحميل PDF 📄' : 'Download PDF 📄'}
                 </button>
               </div>
 
               {/* KPI Cards Row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
                 <KPICard 
-                  title="معدل إنجاز المهام" 
+                  title={language === 'ar' ? 'معدل إنجاز المهام' : 'Completion Rate'} 
                   value={`${completionRate}%`} 
-                  change={completionRate >= 70 ? "+ جيد جداً" : "- يحتاج تحسين"} 
+                  change={completionRate >= 70 ? (language === 'ar' ? "+ جيد جداً" : "+ Very Good") : (language === 'ar' ? "- يحتاج تحسين" : "- Needs work")} 
                   isPositive={completionRate >= 70}
                   icon={<FileText className="w-5 h-5" />} 
                 />
                 <KPICard 
-                  title="متوسط وقت الإنجاز" 
-                  value="1.8 يوم" 
-                  change="ضمن المهلة" 
+                  title={language === 'ar' ? 'متوسط وقت الإنجاز' : 'Avg Completion Time'} 
+                  value={language === 'ar' ? '1.8 يوم' : '1.8 Days'} 
+                  change={language === 'ar' ? 'ضمن المهلة' : 'Within SLA'} 
                   isPositive={true}
                   icon={<Calendar className="w-5 h-5" />} 
                 />
                 <KPICard 
-                  title="زيارات موثقة GPS" 
-                  value={tasks.filter(t => t.latitude).length} 
-                  change={`${Math.round((tasks.filter(t => t.latitude).length / (tasks.filter(t => t.location).length || 1)) * 100)}% موثق`} 
+                  title={language === 'ar' ? 'زيارات موثقة GPS' : 'GPS Verified Visits'} 
+                  value={dateFilteredTasks.filter(t => t.latitude).length} 
+                  change={`${Math.round((dateFilteredTasks.filter(t => t.latitude).length / (dateFilteredTasks.filter(t => t.location).length || 1)) * 100)}%`} 
                   isPositive={true}
                   icon={<MapPin className="w-5 h-5" />} 
                 />
                 <KPICard 
-                  title="الموظف الأكثر نشاطاً" 
+                  title={language === 'ar' ? 'الموظف الأكثر نشاطاً' : 'Most Active Employee'} 
                   value={topEmployee} 
-                  change="الأكثر إنجازاً" 
+                  change={language === 'ar' ? 'الأكثر إنجازاً' : 'Highest efficiency'} 
                   isPositive={true}
                   icon={<UserIcon className="w-5 h-5" />} 
                 />
@@ -918,17 +1123,17 @@ export default function ManagerDashboard() {
 
               {/* Charts Row 1: Weekly + Status Donut */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <WeeklyPerformanceChart tasks={tasks} />
+                <div className="lg:col-span-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                  <WeeklyPerformanceChart tasks={dateFilteredTasks} />
                 </div>
-                <div className="lg:col-span-1">
-                  <TaskStatusDonut tasks={tasks} />
+                <div className="lg:col-span-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                  <TaskStatusDonut tasks={dateFilteredTasks} />
                 </div>
               </div>
 
               {/* Charts Row 2: Employee Performance */}
-              <div className="grid grid-cols-1">
-                <EmployeePerformanceChart tasks={tasks} employees={employees} />
+              <div className="grid grid-cols-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                <EmployeePerformanceChart tasks={dateFilteredTasks} employees={employees} />
               </div>
             </div>
           )}
@@ -939,7 +1144,7 @@ export default function ManagerDashboard() {
       {(activeTab === 'overview' || activeTab === 'tasks') && (
         <button
           onClick={openAddTask}
-          className="md:hidden fixed bottom-20 left-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-300/50 flex items-center justify-center z-40 hover:bg-blue-700 active:scale-95 transition-all"
+          className="md:hidden fixed bottom-20 left-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-300/50 flex items-center justify-center z-40 hover:bg-blue-700 active:scale-95 transition-all border-none cursor-pointer"
         >
           <Plus className="w-6 h-6" />
         </button>
@@ -977,9 +1182,9 @@ export default function ManagerDashboard() {
       {/* ── EMPLOYEE EDIT MODAL ── */}
       {isEmployeeModalOpen && selectedEmployee && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-md overflow-hidden animate-scale-up" dir="rtl">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-md overflow-hidden animate-scale-up" dir={language === 'ar' ? 'rtl' : 'ltr'}>
             <div className="px-6 py-5 border-b border-slate-50 flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-800 m-0">تعديل بيانات الموظف</h2>
+              <h2 className="text-base font-bold text-slate-800 m-0">{language === 'ar' ? 'تعديل بيانات الموظف' : 'Edit Employee Details'}</h2>
               <button
                 onClick={() => setEmployeeModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 bg-transparent border-none text-base cursor-pointer"
@@ -989,7 +1194,7 @@ export default function ManagerDashboard() {
             </div>
             <form onSubmit={handleUpdateEmployee} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">الاسم كامل</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">{language === 'ar' ? 'الاسم كامل' : 'Full Name'}</label>
                 <input
                   type="text"
                   value={editEmpName}
@@ -1000,7 +1205,7 @@ export default function ManagerDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">البريد الإلكتروني (حساب الدخول)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">{language === 'ar' ? 'البريد الإلكتروني (حساب الدخول)' : 'Email (Login Account)'}</label>
                 <input
                   type="email"
                   value={editEmpEmail}
@@ -1009,27 +1214,29 @@ export default function ManagerDashboard() {
                   required
                 />
                 <p className="text-[10px] text-amber-600 mt-1.5 font-medium leading-relaxed bg-amber-50 px-3 py-2 rounded-xl border border-amber-100/50">
-                  ⚠️ تنبيه: تعديل البريد الإلكتروني سيغير اسم المستخدم الذي يسجل به الموظف دخوله فوراً.
+                  {language === 'ar' 
+                    ? '⚠️ تنبيه: تعديل البريد الإلكتروني سيغير اسم المستخدم الذي يسجل به الموظف دخوله فوراً.'
+                    : '⚠️ Warning: Changing the email address will immediately update the employee login credentials.'}
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">الدور الوظيفي</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">{language === 'ar' ? 'الدور الوظيفي' : 'Role'}</label>
                 <select
                   value={editEmpRole}
                   onChange={(e) => setEditEmpRole(e.target.value as 'manager' | 'employee')}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors cursor-pointer"
                 >
-                  <option value="employee">موظف ميداني</option>
-                  <option value="manager">مدير</option>
+                  <option value="employee">{language === 'ar' ? 'موظف ميداني' : 'Field Employee'}</option>
+                  <option value="manager">{language === 'ar' ? 'مدير' : 'Manager'}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">كلمة مرور جديدة (اختياري)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">{language === 'ar' ? 'كلمة مرور جديدة (اختياري)' : 'New Password (Optional)'}</label>
                 <input
                   type="password"
-                  placeholder="اتركه فارغاً للاحتفاظ بكلمة المرور الحالية"
+                  placeholder={language === 'ar' ? 'اتركه فارغاً للاحتفاظ بكلمة المرور الحالية' : 'Leave empty to keep current password'}
                   value={editEmpPassword}
                   onChange={(e) => setEditEmpPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
@@ -1042,14 +1249,14 @@ export default function ManagerDashboard() {
                   disabled={updatingEmployee}
                   className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors border-none cursor-pointer flex items-center justify-center"
                 >
-                  {updatingEmployee ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                  {updatingEmployee ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ التغييرات' : 'Save Changes')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setEmployeeModalOpen(false)}
                   className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors border-none cursor-pointer"
                 >
-                  إلغاء
+                  {t.common.cancel}
                 </button>
               </div>
             </form>
@@ -1060,15 +1267,24 @@ export default function ManagerDashboard() {
       {/* ── EMPLOYEE DELETE CONFIRM MODAL ── */}
       {isDeleteConfirmOpen && selectedEmployee && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-sm p-6 space-y-4 text-center animate-scale-up" dir="rtl">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-sm p-6 space-y-4 text-center animate-scale-up" dir={language === 'ar' ? 'rtl' : 'ltr'}>
             <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl mx-auto border border-rose-100">
               ⚠️
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-800">حذف الموظف نهائياً</h3>
+              <h3 className="text-base font-bold text-slate-800">{language === 'ar' ? 'حذف الموظف نهائياً' : 'Delete Employee Account'}</h3>
               <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                هل أنت متأكد من رغبتك في حذف الموظف <span className="font-bold text-slate-800">{selectedEmployee.name}</span>؟<br />
-                سيتم إلغاء حساب دخول الموظف فوراً ولن يتمكن من الوصول للتطبيق مجدداً. هذا الإجراء لا يمكن التراجع عنه.
+                {language === 'ar' ? (
+                  <>
+                    هل أنت متأكد من رغبتك في حذف الموظف <span className="font-bold text-slate-800">{selectedEmployee.name}</span>؟<br />
+                    سيتم إلغاء حساب دخول الموظف فوراً ولن يتمكن من الوصول للتطبيق مجدداً. هذا الإجراء لا يمكن التراجع عنه.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete employee <span className="font-bold text-slate-800">{selectedEmployee.name}</span>?<br />
+                    The login credentials will be revoked immediately and access will be blocked forever. This action is irreversible.
+                  </>
+                )}
               </p>
             </div>
             <div className="flex gap-3 pt-2">
@@ -1077,18 +1293,50 @@ export default function ManagerDashboard() {
                 disabled={updatingEmployee}
                 className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 transition-colors border-none cursor-pointer flex items-center justify-center"
               >
-                {updatingEmployee ? 'جاري الحذف...' : 'نعم، احذف الحساب'}
+                {updatingEmployee ? (language === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (language === 'ar' ? 'نعم، احذف الحساب' : 'Yes, Delete Account')}
               </button>
               <button
                 onClick={() => setDeleteConfirmOpen(false)}
                 className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors border-none cursor-pointer"
               >
-                إلغاء
+                {t.common.cancel}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── LOGOUT CONFIRM MODAL ── */}
+      {isLogoutConfirmOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" onClick={() => setLogoutConfirmOpen(false)}>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl w-full max-w-sm p-6 space-y-4 text-center animate-scale-up" onClick={(e) => e.stopPropagation()} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center text-xl mx-auto border border-amber-100">
+              ⚠️
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">{t.common.logoutConfirmTitle}</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                {t.common.logoutConfirmDesc}
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => { setLogoutConfirmOpen(false); signOut(); }}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors border-none cursor-pointer"
+              >
+                {t.common.yesLogout}
+              </button>
+              <button
+                onClick={() => setLogoutConfirmOpen(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors border-none cursor-pointer"
+              >
+                {t.common.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
