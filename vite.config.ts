@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    !isNative && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['logo.png'],
       manifest: {
@@ -40,7 +40,12 @@ export default defineConfig({
         importScripts: ['/push-worker.js']
       }
     })
-  ],
+  ].filter(Boolean),
+  build: {
+    rollupOptions: {
+      external: isNative ? ['virtual:pwa-register'] : [],
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
