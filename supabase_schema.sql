@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   latitude DECIMAL(10, 8),
   longitude DECIMAL(11, 8),
   location_verified_at BIGINT,
+  start_latitude DECIMAL(10, 8),
+  start_longitude DECIMAL(11, 8),
+  start_location_verified_at BIGINT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT
 );

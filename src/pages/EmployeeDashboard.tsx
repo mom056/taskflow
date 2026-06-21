@@ -12,17 +12,24 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGeoLocation } from '../hooks/useGeoLocation';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Capacitor } from '@capacitor/core';
-import { openExternalUrl, takeNativePhoto } from '../lib/nativeServices';
+import { openExternalUrl, takeNativePhoto, triggerHaptic } from '../lib/nativeServices';
 import { useBackButton } from '../hooks/useBackButton';
 import { useActivityLog } from '../hooks/useActivityLog';
 import { useTranslation } from '../contexts/LanguageContext';
+import PullToRefresh from '../components/PullToRefresh';
+import NotificationCenter from '../components/NotificationCenter';
+import AppLogo from '../components/AppLogo';
 
 export default function EmployeeDashboard() {
   const { signOut, user, profile, company } = useAuth();
-  const { logActivity } = useActivityLog();
+  const { logActivity } = useActivityLog(false);
   const { t, language } = useTranslation();
   const queryClient = useQueryClient();
   const { tasks, isLoading, isError } = useTasks(user?.id);
+
+  const handleRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
+  };
   const { uploadImage, isUploading, progress, statusText } = useImageUpload();
   const { isOnline, queue, queueLength, addToQueue } = useOfflineQueue(() => {
     queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
@@ -194,6 +201,7 @@ export default function EmployeeDashboard() {
           });
         }
       } catch (err: any) {
+        triggerHaptic('error');
         toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.' : 'GPS failure. Access permission is required to update task status.'), { id: toastId });
         return; // Block status change if GPS coordinate capture fails
       }
@@ -241,17 +249,37 @@ export default function EmployeeDashboard() {
         toast.error(language === 'ar' ? 'لا تملك صلاحية تحديث هذه المهمة' : 'You do not have permission to update this task');
         return;
       }
+
+      // Notify the manager/creator of the task
+      const updatedTask = data[0];
+      if (updatedTask.created_by && updatedTask.created_by !== user.id) {
+        const statusText = newStatus === 'in_progress' ? 'بدأ العمل على' : 'أتمّ';
+        const statusTextEn = newStatus === 'in_progress' ? 'started working on' : 'completed';
+        await supabase.from('notifications').insert([{
+          user_id: updatedTask.created_by,
+          title: language === 'ar' ? 'تحديث على حالة مهمة' : 'Task Status Updated',
+          body: language === 'ar'
+            ? `${profile?.name || 'الموظف'} ${statusText} المهمة: ${updatedTask.title}`
+            : `${profile?.name || 'Employee'} ${statusTextEn} the task: ${updatedTask.title}`,
+          link: '/manager',
+          company_id: profile?.company_id,
+          created_at: Date.now()
+        }]);
+      }
+
       logActivity('task_status_changed', 'task', taskId, {
         title: data[0]?.title || 'task',
         oldStatus: tasks.find(t => t.id === taskId)?.status,
         newStatus: newStatus
       });
+      triggerHaptic(isComplete ? 'success' : 'light');
       queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
       toast.success(isStart 
         ? (language === 'ar' ? 'تم بدء العمل على المهمة وتوثيق موقعك' : 'Task started and location documented') 
         : (language === 'ar' ? 'تم إتمام المهمة وتوثيق موقعك' : 'Task completed and location documented')
       );
     } catch (err: any) {
+      triggerHaptic('error');
       console.error('[Task Update]', err);
       toast.error(language === 'ar' ? `خطأ: ${err.message || 'تعذر تحديث الحالة'}` : `Error: ${err.message || 'Could not update status'}`);
     }
@@ -367,7 +395,7 @@ export default function EmployeeDashboard() {
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className={`w-[240px] bg-white ${language === 'ar' ? 'border-l' : 'border-r'} border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex`}>
         <div className="mb-10">
-          <div className="text-2xl font-bold text-blue-600">{t.common.appName}</div>
+          <AppLogo size={30} theme="light" showText={true} />
           {company && (
             <div className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
               <span>{company.name}</span>
@@ -434,9 +462,12 @@ export default function EmployeeDashboard() {
               </div>
             </div>
           </Link>
-          <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full cursor-pointer border-none bg-transparent">
-            <LogOut className="w-4 h-4 text-slate-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full cursor-pointer border-none bg-transparent">
+              <LogOut className="w-4 h-4 text-slate-500" />
+            </button>
+          </div>
         </header>
 
         {/* Desktop header */}
@@ -466,10 +497,13 @@ export default function EmployeeDashboard() {
               )
             )}
           </div>
-          <button onClick={() => setTaskFormOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none">
-            <PlusCircle className="w-4 h-4" />{language === 'ar' ? 'مهمة / زيارة جديدة' : 'New Task / Visit'}
-          </button>
+          <div className="flex items-center gap-3">
+            <NotificationCenter />
+            <button onClick={() => setTaskFormOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none">
+              <PlusCircle className="w-4 h-4" />{language === 'ar' ? 'مهمة / زيارة جديدة' : 'New Task / Visit'}
+            </button>
+          </div>
         </header>
 
         {/* Content */}
@@ -491,7 +525,8 @@ export default function EmployeeDashboard() {
             </div>
           )}
 
-          <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-6">
+          <PullToRefresh onRefresh={handleRefresh}>
+            <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-6">
 
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -657,12 +692,13 @@ export default function EmployeeDashboard() {
                 }
               </div>
             )}
-          </div>
+            </div>
+          </PullToRefresh>
         </div>
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-30 shadow-[0_-2px_16px_rgba(0,0,0,0.06)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-30 shadow-[0_-2px_16px_rgba(0,0,0,0.06)] safe-pb" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         {([
           { id: 'active', icon: ClipboardList, label: language === 'ar' ? 'نشطة' : 'Active' },
           { id: 'completed', icon: CheckSquare, label: language === 'ar' ? 'المنجزة' : 'Completed' },

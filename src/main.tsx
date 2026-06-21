@@ -8,6 +8,23 @@ import { Preferences } from '@capacitor/preferences';
 import { registerSW } from 'virtual:pwa-register';
 
 import { LanguageProvider } from './contexts/LanguageContext';
+import * as Sentry from '@sentry/react';
+
+// Initialize Sentry for crash reporting & performance monitoring
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    tracePropagationTargets: ['localhost', /^https:\/\/bzsmwmkgmropuadpkcku\.supabase\.co/],
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+    environment: import.meta.env.MODE || 'production',
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

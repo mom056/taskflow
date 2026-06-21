@@ -8,12 +8,15 @@ import { useActivityLog } from '../hooks/useActivityLog';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskMap from '../components/TaskMap';
-import { openExternalUrl } from '../lib/nativeServices';
+import { openExternalUrl, triggerHaptic } from '../lib/nativeServices';
 
 import { useTasks } from '../hooks/useTasks';
 import { useUsers } from '../hooks/useUsers';
 import { useVisits } from '../hooks/useVisits';
 import { useQueryClient } from '@tanstack/react-query';
+import PullToRefresh from '../components/PullToRefresh';
+import NotificationCenter from '../components/NotificationCenter';
+import AppLogo from '../components/AppLogo';
 
 import TasksTable from '../components/TasksTable';
 import TaskModal from '../components/TaskModal';
@@ -35,6 +38,15 @@ export default function ManagerDashboard() {
 
   const queryClient = useQueryClient();
   const { tasks, isLoading: tasksLoading, isError: tasksErrorObj } = useTasks();
+
+  const handleRefresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+      queryClient.invalidateQueries({ queryKey: ['users'] }),
+      queryClient.invalidateQueries({ queryKey: ['visits'] }),
+      queryClient.invalidateQueries({ queryKey: ['activity_log'] })
+    ]);
+  };
   const { users: employees, isLoading: employeesLoading, isError: usersErrorObj } = useUsers('employee');
   const { visits, isLoading: visitsLoading, isError: visitsErrorObj } = useVisits();
 
@@ -227,8 +239,10 @@ export default function ManagerDashboard() {
       if (error) throw error;
       logActivity('task_deleted', 'task', task.id, { title: task.title });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم حذف المهمة بنجاح' : 'Task deleted successfully');
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر حذف المهمة' : 'Could not delete task'));
     }
   };
@@ -250,35 +264,26 @@ export default function ManagerDashboard() {
     try {
       const cleanEmail = editEmpEmail.trim().toLowerCase();
       
-      const { error: profileError } = await supabase
-        .from('users')
-        .update({ name: editEmpName, email: cleanEmail, role: editEmpRole })
-        .eq('id', selectedEmployee.id);
-      if (profileError) throw profileError;
-
-      // Update Auth email if changed
-      if (cleanEmail !== selectedEmployee.email.toLowerCase()) {
-        const { error: authEmailError } = await supabase.rpc('admin_update_user_email', {
-          user_uuid: selectedEmployee.id,
-          new_email: cleanEmail
-        });
-        if (authEmailError) throw authEmailError;
-      }
-
-      // Update Auth password if provided
-      if (editEmpPassword.trim()) {
-        const { error: authPassError } = await supabase.rpc('admin_update_user_password', {
-          user_uuid: selectedEmployee.id,
-          new_password: editEmpPassword.trim()
-        });
-        if (authPassError) throw authPassError;
-      }
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'update',
+          userId: selectedEmployee.id,
+          name: editEmpName,
+          email: cleanEmail,
+          password: editEmpPassword.trim() || undefined,
+          role: editEmpRole
+        }
+      });
+      if (error) throw new Error(error.message || 'Failed to update employee');
+      if (data?.error) throw new Error(data.error);
 
       logActivity('employee_updated', 'employee', selectedEmployee.id, { name: editEmpName });
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث بيانات الموظف بنجاح' : 'Employee details updated successfully');
       setEmployeeModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
+      triggerHaptic('error');
       console.error('[Update Employee]', err);
       toast.error(err.message || (language === 'ar' ? 'حدث خطأ أثناء تحديث بيانات الموظف' : 'An error occurred while updating employee'));
     } finally {
@@ -295,22 +300,22 @@ export default function ManagerDashboard() {
     if (!selectedEmployee) return;
     setUpdatingEmployee(true);
     try {
-      const { error: dbError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', selectedEmployee.id);
-      if (dbError) throw dbError;
-
-      const { error: authError } = await supabase.rpc('admin_delete_auth_user', {
-        user_uuid: selectedEmployee.id
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'delete',
+          userId: selectedEmployee.id
+        }
       });
-      if (authError) throw authError;
+      if (error) throw new Error(error.message || 'Failed to delete employee');
+      if (data?.error) throw new Error(data.error);
 
       logActivity('employee_deleted', 'employee', selectedEmployee.id, { name: selectedEmployee.name });
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم حذف الموظف نهائياً بنجاح' : 'Employee deleted successfully');
       setDeleteConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
+      triggerHaptic('error');
       console.error('[Delete Employee]', err);
       toast.error(err.message || (language === 'ar' ? 'تعذر حذف حساب الموظف' : 'Could not delete employee account'));
     } finally {
@@ -423,7 +428,7 @@ export default function ManagerDashboard() {
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className={`w-[240px] bg-white ${language === 'ar' ? 'border-l' : 'border-r'} border-slate-200 flex-col p-6 shrink-0 z-10 hidden md:flex`}>
         <div className="mb-10">
-          <div className="text-2xl font-bold text-blue-600">{t.common.appName}</div>
+          <AppLogo size={30} theme="light" showText={true} />
           {company && (
             <div className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
               <span>{company.name}</span>
@@ -516,9 +521,12 @@ export default function ManagerDashboard() {
               </div>
             </div>
           </Link>
-          <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer border-none bg-transparent">
-            <LogOut className="w-4 h-4 text-slate-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer border-none bg-transparent">
+              <LogOut className="w-4 h-4 text-slate-500" />
+            </button>
+          </div>
         </header>
 
         {/* ── DESKTOP HEADER ── */}
@@ -532,6 +540,7 @@ export default function ManagerDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationCenter />
             {(activeTab === 'overview' || activeTab === 'tasks') && (
               <>
                 <button onClick={exportToExcel} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer">
@@ -565,6 +574,7 @@ export default function ManagerDashboard() {
 
         {/* ── SCROLLABLE CONTENT AREA ── */}
         <div className="flex-1 overflow-y-auto relative">
+          <PullToRefresh onRefresh={handleRefresh}>
           {isLoading && (
             <div className="absolute inset-0 bg-white/60 backdrop-blur-xs z-20 flex items-center justify-center">
               <div className="rounded-full h-8 w-8 bg-blue-600 animate-ping" />
@@ -1137,6 +1147,7 @@ export default function ManagerDashboard() {
               </div>
             </div>
           )}
+          </PullToRefresh>
         </div>
       </main>
 

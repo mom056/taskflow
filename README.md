@@ -1,20 +1,124 @@
+# 🚀 TaskFlow — Field Task Management System
+
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" height="475" alt="TaskFlow Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  
+  <p align="center">
+    <strong>تطبيق ذكي متكامل للهواتف والويب لإدارة المهام الميدانية والموظفين في الوقت الفعلي.</strong>
+  </p>
+  
+  <p align="center">
+    <img src="https://img.shields.io/badge/Version-1.3.0-blue.svg?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/Platform-PWA%20%7C%20Android%20%7C%20iOS-brightgreen.svg?style=flat-square" alt="Platforms" />
+    <img src="https://img.shields.io/badge/Backend-Supabase%20%7C%20Deno-emerald.svg?style=flat-square" alt="Backend" />
+    <img src="https://img.shields.io/badge/Security-Production--Grade-success.svg?style=flat-square" alt="Security" />
+  </p>
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+> [!NOTE]
+> هذا التطبيق مبني ومجهّز بالكامل ليكون **تطبيق إنتاجي (Production-Ready)** يدعم العمل الهجين (ويب وهواتف ذكية) مع دعم حماية البيانات والعمل دون اتصال بالإنترنت.
 
-View your app in AI Studio: https://ai.studio/apps/35c9cf9b-14d1-4a63-a910-130e5bccf2ea
+---
 
-## Run Locally
+## 🏛️ البنية الهندسية للتطبيق (Architecture Overview)
 
-**Prerequisites:**  Node.js
+تعتمد بنية تطبيق **TaskFlow** على عزل الطبقات لضمان الكفاءة والأمان العالي:
 
+```mermaid
+graph TD
+    A[تطبيق الهاتف / الويب - React] -->|تنفيذ آمن| B(Supabase Edge Functions)
+    A -->|استعلامات مباشرة محمية بـ RLS| C[(Supabase Database)]
+    C -->|Database Webhooks| D(Edge Function: send-push)
+    D -->|إشعارات| E[أجهزة الموظفين - Web Push / FCM]
+    B -->|إدارة المصادقة بـ Service Role| F(Supabase Auth)
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+
+## ✨ الميزات الرئيسية المنفذة (Core Features)
+
+### 👥 إدارة المستخدمين وصلاحيات الشركات (Multi-Tenancy)
+* **عزل تام للبيانات (RLS Policies):** سياسات حماية على مستوى قواعد البيانات تمنع بشكل قاطع تسريب أي بيانات بين الشركات المختلفة.
+* **إدارة الموظفين الآمنة:** إضافة وتحديث وحذف الموظفين يتم عبر وظيفة سحابية (`create-user`) مشفرة وموثقة تمنع التلاعب بالصلاحيات.
+* **تحديد السعة والحدود:** نظام محاسبة ديناميكي يمنع تخطي الحد الأقصى للموظفين المسموح به لكل شركة بناءً على باقة الاشتراك المفعلة.
+
+### 📱 ميزات الهواتف المتقدمة (Native Shell Features)
+* **المصادقة الحيوية (Biometric Login):** تفعيل الدخول السريع بالبصمة (Passkeys / FaceID) مع حفظ الجلسات بشكل مشفر محلياً.
+* **التغذية اللمسية التفاعلية (Haptics):** اهتزازات خفيفة ومحسوسة تحاكي التطبيقات النيتيف عند تنفيذ الإجراءات أو حدوث الأخطاء.
+* **الروابط العميقة (Deep Linking):** دعم فتح روابط استرداد كلمة المرور المنسية مباشرة داخل التطبيق وتمرير الرموز تلقائياً.
+* **تصدير التقارير المتوافق (Native Sharing):** توليد تقارير PDF ومشاركتها فورياً عبر نافذة المشاركة الرسمية في الهاتف (Share Sheet) بدلاً من النوافذ المنبثقة التقليدية.
+
+### 🌐 الاستقرار والمرونة دون إنترنت (Offline-First Design)
+* **التخزين المؤقت للبيانات:** يعرض التطبيق آخر بيانات تم جلبها عند فتح التطبيق دون إنترنت لمنع الشاشة البيضاء أو ظهور رسائل الأخطاء.
+* **طابور العمليات دون اتصال (Offline Queue):** تخزين العمليات محلياً ومزامنتها تلقائياً مع خوادم Supabase فور استعادة الاتصال بالشبكة.
+* **الخريطة الذكية:** خريطة مهام مرنة تعتمد على Leaflet مع تنبيه وإرشاد المستخدم في حال انقطاع الإنترنت.
+
+---
+
+## 💻 التشغيل المحلي (Local Development Setup)
+
+### المتطلبات المسبقة:
+* تثبيت **Node.js** (الإصدار 18 أو أحدث)
+* تثبيت **Supabase CLI** (اختياري لتحديث الدوال السحابية محلياً)
+
+### 1. تثبيت الحزم والمكتبات:
+```bash
+npm install
+```
+
+### 2. إعداد ملف البيئة:
+قم بإنشاء ملف `.env` في المجلد الرئيسي وإضافة البيانات التالية:
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_SENTRY_DSN=your_sentry_dsn_url
+```
+
+### 3. تشغيل التطبيق في وضع التطوير:
+```bash
+npm run dev
+```
+
+### 4. فحص لغة TypeScript وتجميع المشروع:
+```bash
+npx tsc --noEmit
+npm run build
+```
+
+---
+
+## 🚀 النشر وتحديث البيئة السحابية (Deployment Guide)
+
+### 1. نشر الدوال السحابية (Deploy Edge Functions):
+تأكد من تسجيل الدخول إلى Supabase CLI ثم قم بنشر الدوال اللازمة:
+```bash
+npx supabase functions deploy create-user --no-verify-jwt
+npx supabase functions deploy send-push --no-verify-jwt
+```
+
+### 2. تهيئة المتغيرات السرية (Supabase Secrets):
+تأكد من ضبط المتغيرات الأمنية الضرورية لعمل الدوال السحابية:
+```bash
+npx supabase secrets set WEBHOOK_SECRET=your_strong_webhook_secret
+npx supabase secrets set VAPID_PUBLIC_KEY=your_vapid_public_key
+npx supabase secrets set VAPID_PRIVATE_KEY=your_vapid_private_key
+npx supabase secrets set FIREBASE_SERVICE_ACCOUNT=your_firebase_json_content
+```
+
+### 3. بناء تطبيق الهاتف لمتاجر التطبيقات (Capacitor Sync):
+لتحديث أصول الويب ومزامنتها مع تطبيقات الهواتف النيتيف:
+```bash
+npx cap sync
+```
+
+---
+
+## 🛠️ تفاصيل البناء والتوافق (Version Info)
+
+* **React:** 18.x
+* **Build Tool:** Vite 6.x
+* **CSS System:** Tailwind CSS v4
+* **Native Wrappers:** Capacitor 8.x
+* **PWA Engine:** Vite PWA Plugin

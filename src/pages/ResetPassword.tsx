@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Lock, Target, CheckCircle } from 'lucide-react';
+import { Lock, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../contexts/LanguageContext';
+import { AppLogoIcon } from '../components/AppLogo';
 
 export default function ResetPassword() {
   const [newPassword, setNewPassword] = useState('');
@@ -79,8 +80,8 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="max-w-md w-full bg-white rounded-4xl shadow-sm border border-slate-200 p-8">
         <div className="text-center mb-10">
-          <div className="mx-auto bg-blue-50 h-16 w-16 rounded-2xl flex items-center justify-center mb-6">
-            <Target className="h-8 w-8 text-blue-600" />
+          <div className="mx-auto h-16 w-16 flex items-center justify-center mb-6">
+            <AppLogoIcon size={56} />
           </div>
           <h2 className="text-2xl font-bold text-slate-900">
             {language === 'ar' ? 'تعيين كلمة مرور جديدة' : 'Reset Password'}

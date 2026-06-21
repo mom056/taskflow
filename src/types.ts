@@ -66,8 +66,8 @@ export const statusColors: Record<TaskStatus, string> = {
   pending: 'bg-red-100 text-red-800'
 };
 
-export function mapCompanyFromDB(dbCompany: any): Company {
-  if (!dbCompany) return null as any;
+export function mapCompanyFromDB(dbCompany: any): Company | null {
+  if (!dbCompany) return null;
   return {
     id: dbCompany.id,
     name: dbCompany.name,

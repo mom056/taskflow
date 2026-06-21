@@ -13,7 +13,7 @@ export default defineConfig({
     tailwindcss(),
     !isNative && VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['logo.png'],
       manifest: {
         name: 'TaskFlow - إدارة المهام الميدانية',
         short_name: 'TaskFlow',
@@ -27,9 +27,9 @@ export default defineConfig({
         lang: 'ar',
         icons: [
           {
-            src: 'icon.svg',
+            src: 'logo.png',
             sizes: '192x192 512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ]

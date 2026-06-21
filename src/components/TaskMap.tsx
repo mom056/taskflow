@@ -21,6 +21,18 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Filter tasks with valid GPS coordinates (either start or end)
   const geoTasks = tasks.filter(
@@ -34,6 +46,8 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
       setLeafletLoaded(true);
       return;
     }
+
+    if (!isOnline) return;
 
     // Load CSS
     const link = document.createElement('link');
@@ -56,7 +70,7 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
     return () => {
       // Clean up script/css links if desired, or leave them cached
     };
-  }, []);
+  }, [isOnline]);
 
   // Initialize Map
   useEffect(() => {
@@ -189,12 +203,25 @@ export default function TaskMap({ tasks, getEmployeeName }: TaskMapProps) {
 
   return (
     <div className="relative w-full h-[500px] bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-inner">
-      {!leafletLoaded && (
+      {!leafletLoaded && isOnline && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 gap-3 z-10">
           <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
           <span className="text-sm font-semibold text-slate-500">
             {language === 'ar' ? 'جاري تحميل خريطة الزيارات الميدانية...' : 'Loading field visits map...'}
           </span>
+        </div>
+      )}
+      {!leafletLoaded && !isOnline && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 p-6 text-center z-10">
+          <MapPin className="w-12 h-12 text-slate-300 mb-3 animate-pulse" />
+          <p className="text-slate-600 text-sm font-semibold">
+            {language === 'ar' ? 'تعذر تحميل خريطة الزيارات الميدانية نظراً لعدم وجود اتصال بالإنترنت' : 'Could not load visits map because you are offline'}
+          </p>
+          <p className="text-slate-400 text-xs mt-1">
+            {language === 'ar' 
+              ? 'يرجى التحقق من اتصال شبكتك للمحاولة مجدداً.'
+              : 'Please verify your network connection and try again.'}
+          </p>
         </div>
       )}
       {leafletLoaded && geoTasks.length === 0 && (

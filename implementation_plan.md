@@ -749,3 +749,477 @@ const ALLOWED_ORIGINS = [
 > **هل توافق على هذه الخطة التنفيذية؟ وهل ترغب في البدء بالمرحلة الأولى (الأمان والأساسيات الحرجة) فوراً؟**
 >
 > يمكنك أيضاً إعادة ترتيب الأولويات أو حذف/إضافة بنود حسب رؤيتك.
+
+# خطة تنفيذية شاملة: إصلاح واستكمال مشروع TaskFlow
+
+> بناءً على فحص شامل لكل ملف مصدري في المشروع (35 ملف)، تم تصنيف جميع الأعمال المطلوبة في **6 مراحل متسلسلة** مرتبة حسب الخطورة والتأثير.
+
+---
+
+## المرحلة 1: إصلاحات حرجة تمنع النشر (Critical Blockers)
+
+> [!CAUTION]
+> هذه المرحلة **إلزامية** قبل أي نشر. بدونها التطبيق **لا يعمل بشكل صحيح**.
+
+### 1.1 إضافة أعمدة `start_latitude/start_longitude` المفقودة من قاعدة البيانات
+
+**المشكلة:** الكود في [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx) (سطر 204-206) و [useTasks.ts](file:///d:/CP+/taskflow/src/hooks/useTasks.ts) (سطر 39-41) و [useOfflineQueue.ts](file:///d:/CP+/taskflow/src/hooks/useOfflineQueue.ts) (سطر 76-78) يكتب ويقرأ هذه الأعمدة، لكنها **غير معرّفة** في [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql) (سطر 43-60).
+
+**التأثير:** عندما يضغط الموظف "بدء العمل على مهمة"، يتم التقاط GPS لكن **موقع البداية لا يُحفظ** في قاعدة البيانات ← بيانات ناقصة في التقارير والخريطة.
+
+#### [MODIFY] [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql)
+
+- إضافة 3 أعمدة جديدة لجدول `tasks`:
+
+```sql
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS start_latitude DECIMAL(10, 8);
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS start_longitude DECIMAL(11, 8);
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS start_location_verified_at BIGINT;
+```
+
+**ملف SQL منفصل يُشغّل في Supabase SQL Editor** + تحديث الـ schema file.
+
+---
+
+### 1.2 إنشاء جدول `activity_log` في Supabase
+
+**المشكلة:** الجدول معرّف في [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql) (سطر 393-422) **لكن لم يُنشأ فعلياً** في قاعدة البيانات ← خطأ `404 Not Found` متكرر.
+
+**التأثير:** كل طلب لجلب سجل الأحداث يفشل ويعيد المحاولة (retry) مما يُغرق الشبكة بطلبات فاشلة.
+
+#### إجراء مطلوب:
+
+- تشغيل أوامر SQL الموجودة بالفعل في `supabase_schema.sql` سطر 393-422 في Supabase SQL Editor.
+- أو تشغيل الملف بالكامل لأنه يستخدم `IF NOT EXISTS`.
+
+---
+
+### 1.3 إضافة نطاق الإنتاج لـ CORS في Edge Function
+
+**المشكلة:** [create-user/index.ts](file:///d:/CP+/taskflow/supabase/functions/create-user/index.ts) (سطر 13-18) يسمح فقط لـ `localhost` و `capacitor://localhost`. أي طلب من نطاق الإنتاج (مثل Vercel) **سيُرفض**.
+
+#### [MODIFY] [create-user/index.ts](file:///d:/CP+/taskflow/supabase/functions/create-user/index.ts)
+
+- إضافة نطاق الإنتاج الفعلي + دعم ديناميكي عبر Environment Variable:
+
+```typescript
+const PRODUCTION_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "";
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "capacitor://localhost",
+  "ionic://localhost",
+  ...(PRODUCTION_ORIGIN ? [PRODUCTION_ORIGIN] : []),
+];
+```
+
+---
+
+### 1.4 إصلاح حذف الشركة ليحذف `auth.users` أيضاً
+
+**المشكلة:** [SuperAdminDashboard.tsx](file:///d:/CP+/taskflow/src/pages/SuperAdminDashboard.tsx) (سطر 290-322) يحذف المستخدمين من `public.users` فقط. حسابات المصادقة (`auth.users`) **تبقى نشطة** ← يمكن للمستخدم المحذوف تسجيل الدخول مجدداً وإنشاء ملف شخصي جديد.
+
+#### [MODIFY] [SuperAdminDashboard.tsx](file:///d:/CP+/taskflow/src/pages/SuperAdminDashboard.tsx)
+
+- تعديل `handleDeleteCompany` لاستخدام Edge Function `create-user` مع `action: 'delete'` لكل مستخدم.
+- أو إنشاء Edge Function جديدة `delete-company` تقبل `companyId` وتحذف جميع مستخدمي الشركة من auth + public ثم تحذف الشركة.
+
+#### [NEW] أو [MODIFY] [create-user/index.ts](file:///d:/CP+/taskflow/supabase/functions/create-user/index.ts)
+
+- إضافة `action: 'delete_company'` الذي:
+  1. يجلب جميع مستخدمي الشركة
+  2. يحذفهم من `auth.users` عبر `supabaseAdmin.auth.admin.deleteUser()`
+  3. يحذف الشركة نفسها
+
+---
+
+### 1.5 إصلاح `useActivityLog` لمنع الطلبات غير الضرورية
+
+**المشكلة:** [useActivityLog.ts](file:///d:/CP+/taskflow/src/hooks/useActivityLog.ts) يجلب 100 سجل في كل مرة يُستدعى — حتى في [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx) (سطر 22) الذي يستخدم فقط `logActivity` ولا يعرض السجلات.
+
+#### [MODIFY] [useActivityLog.ts](file:///d:/CP+/taskflow/src/hooks/useActivityLog.ts)
+
+- إضافة parameter `fetchLogs: boolean = true` للتحكم في تفعيل الـ Query:
+
+```typescript
+export function useActivityLog(fetchLogs: boolean = true) {
+  // ...
+  const { data: activities = [], isLoading, error } = useQuery<ActivityLog[]>({
+    // ...
+    enabled: fetchLogs && !!profile?.company_id,
+  });
+```
+
+#### [MODIFY] [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx)
+
+- تغيير الاستدعاء إلى: `const { logActivity } = useActivityLog(false);`
+
+---
+
+### 1.6 إصلاح `mapCompanyFromDB` لإرجاع `Company | null` بشكل آمن
+
+**المشكلة:** [types.ts](file:///d:/CP+/taskflow/src/types.ts) (سطر 69-70) تُرجع `null as any` مما يكسر Type Safety.
+
+#### [MODIFY] [types.ts](file:///d:/CP+/taskflow/src/types.ts)
+
+```typescript
+export function mapCompanyFromDB(dbCompany: any): Company | null {
+  if (!dbCompany) return null;
+  // ...
+}
+```
+
+- تحديث جميع الاستخدامات في [AuthContext.tsx](file:///d:/CP+/taskflow/src/contexts/AuthContext.tsx) لتتوافق مع النوع الجديد.
+
+---
+
+## المرحلة 2: تحسينات أمنية وتقوية الإنتاج (Security Hardening)
+
+> [!WARNING]
+> هذه المرحلة تسد ثغرات أمنية لا تمنع العمل لكنها **ضرورية قبل النشر العام**.
+
+### 2.1 تأمين Edge Function `send-push`
+
+**المشكلة:** [send-push/index.ts](file:///d:/CP+/taskflow/supabase/functions/send-push/index.ts) لا تتحقق من هوية المتصل. أي شخص يعرف الرابط يمكنه إرسال إشعارات.
+
+#### [MODIFY] [send-push/index.ts](file:///d:/CP+/taskflow/supabase/functions/send-push/index.ts)
+
+- إضافة تحقق من Secret Header مشترك مع Database Trigger:
+
+```typescript
+const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET") || "";
+// في بداية المعالج:
+const incomingSecret = req.headers.get("x-webhook-secret");
+if (WEBHOOK_SECRET && incomingSecret !== WEBHOOK_SECRET) {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+  });
+}
+```
+
+#### [MODIFY] [notify_new_task_webhook.sql](file:///d:/CP+/taskflow/supabase/migrations/notify_new_task_webhook.sql)
+
+- إضافة الـ Secret Header في طلب HTTP:
+
+```sql
+headers := jsonb_build_object(
+  'Content-Type', 'application/json',
+  'x-webhook-secret', current_setting('app.settings.webhook_secret', true)
+)
+```
+
+---
+
+### 2.2 إضافة `company-logos` Storage Bucket في Schema
+
+**المشكلة:** [ProfileSettings.tsx](file:///d:/CP+/taskflow/src/pages/ProfileSettings.tsx) (سطر 211) يرفع الشعار إلى bucket `company-logos`، لكن هذا الـ bucket **غير معرّف** في [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql).
+
+#### [MODIFY] [supabase_schema.sql](file:///d:/CP+/taskflow/supabase_schema.sql)
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('company-logos', 'company-logos', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Managers can upload company logos" ON storage.objects
+  FOR INSERT WITH CHECK (
+    auth.uid() IS NOT NULL AND bucket_id = 'company-logos'
+    AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role::text = 'manager')
+  );
+```
+
+---
+
+### 2.3 حماية ملف `.env` في `.gitignore`
+
+#### [MODIFY] [.gitignore](file:///d:/CP+/taskflow/.gitignore)
+
+- التأكد من وجود `.env` و `.env.local` في الملف.
+
+---
+
+## المرحلة 3: Error Boundary و Code Splitting (استقرار التطبيق)
+
+> **الهدف:** منع الشاشة البيضاء عند أي خطأ + تسريع التحميل الأول.
+
+### 3.1 إضافة Error Boundary عام
+
+**المشكلة:** لا يوجد أي `ErrorBoundary` ← أي خطأ React غير متوقع = شاشة بيضاء فارغة بلا أي معلومة.
+
+#### [NEW] `src/components/ErrorBoundary.tsx`
+
+- Class Component يلتقط أخطاء React ويعرض واجهة "حدث خطأ غير متوقع" مع زر "إعادة المحاولة".
+- يعرض تفاصيل الخطأ في وضع التطوير فقط.
+- يدعم اللغتين.
+
+#### [MODIFY] [App.tsx](file:///d:/CP+/taskflow/src/App.tsx)
+
+- تغليف `<Routes>` بـ `<ErrorBoundary>`.
+
+---
+
+### 3.2 تقسيم الكود (Code Splitting) بـ `React.lazy`
+
+**المشكلة:** الحزمة الأساسية `index-*.js` حجمها ~1.6MB. كل الصفحات تُحمّل دفعة واحدة.
+
+#### [MODIFY] [App.tsx](file:///d:/CP+/taskflow/src/App.tsx)
+
+- تحويل imports الصفحات الرئيسية إلى `React.lazy()`:
+
+```typescript
+const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
+const EmployeeDashboard = React.lazy(() => import("./pages/EmployeeDashboard"));
+const SuperAdminDashboard = React.lazy(
+  () => import("./pages/SuperAdminDashboard"),
+);
+const ProfileSettings = React.lazy(() => import("./pages/ProfileSettings"));
+const LandingPage = React.lazy(() => import("./pages/LandingPage"));
+```
+
+- إضافة `<Suspense fallback={<LoadingSpinner />}>` حول `<Routes>`.
+
+#### [MODIFY] [vite.config.ts](file:///d:/CP+/taskflow/vite.config.ts)
+
+- إضافة `manualChunks` لفصل المكتبات الكبيرة:
+
+```typescript
+build: {
+  rollupOptions: {
+    output: {
+      manualChunks: {
+        vendor: ['react', 'react-dom', 'react-router-dom'],
+        charts: ['recharts'],
+        supabase: ['@supabase/supabase-js'],
+        pdf: ['jspdf', 'jspdf-autotable'],
+      }
+    }
+  }
+}
+```
+
+---
+
+### 3.3 إضافة `preconnect` لتسريع تحميل الخط العربي
+
+#### [MODIFY] [index.html](file:///d:/CP+/taskflow/index.html)
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+```
+
+---
+
+## المرحلة 4: تحسينات تجربة الهاتف (Mobile UX)
+
+> **الهدف:** جعل التطبيق يشبه تطبيق أصلي على الهاتف.
+
+### 4.1 إضافة Safe Area للشريط السفلي
+
+**المشكلة:** [MobileBottomNav.tsx](file:///d:/CP+/taskflow/src/components/MobileBottomNav.tsx) لا يستخدم `safe-pb` ← على هواتف iPhone/Pixel ذات الحواف المستديرة، الأزرار تتداخل مع شريط النظام السفلي.
+
+#### [MODIFY] [MobileBottomNav.tsx](file:///d:/CP+/taskflow/src/components/MobileBottomNav.tsx)
+
+- إضافة `safe-pb` أو `pb-[env(safe-area-inset-bottom)]` للـ `<nav>`.
+- إضافة `pb-20` للمحتوى الرئيسي في صفحات الجوال لمنع التداخل.
+
+---
+
+### 4.2 إضافة انتقالات بين الصفحات (Page Transitions)
+
+**المشكلة:** مكتبة `motion` (Framer Motion) **مثبتة** في [package.json](file:///d:/CP+/taskflow/package.json) (سطر 44) **لكنها لم تُستخدم في أي ملف**.
+
+#### [NEW] `src/components/PageTransition.tsx`
+
+- Wrapper component يستخدم `motion.div` مع `AnimatePresence` لتحريك الصفحات عند التنقل.
+
+#### [MODIFY] [App.tsx](file:///d:/CP+/taskflow/src/App.tsx)
+
+- تغليف كل Route بـ `<PageTransition>`.
+
+---
+
+### 4.3 إضافة "سحب للتحديث" (Pull to Refresh)
+
+#### تثبيت حزمة:
+
+```bash
+npm install @nicegoodthings/react-pull-to-refresh
+# أو تنفيذ يدوي بسيط بـ touch events
+```
+
+#### [MODIFY] [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx) و [ManagerDashboard.tsx](file:///d:/CP+/taskflow/src/pages/ManagerDashboard.tsx)
+
+- إضافة Pull to Refresh handler يستدعي `queryClient.invalidateQueries()`.
+
+---
+
+### 4.4 إضافة الوضع الداكن (Dark Mode)
+
+#### [MODIFY] [index.css](file:///d:/CP+/taskflow/src/index.css)
+
+- إضافة CSS Variables لألوان الوضع الداكن مع `prefers-color-scheme: dark`.
+- إضافة class `.dark` للتبديل اليدوي.
+
+#### [MODIFY] [LanguageContext.tsx](file:///d:/CP+/taskflow/src/contexts/LanguageContext.tsx) أو [NEW] `src/contexts/ThemeContext.tsx`
+
+- إضافة Theme Provider يحفظ اختيار المستخدم في `Preferences`.
+
+#### [MODIFY] جميع الصفحات ولوحات التحكم
+
+- استبدال ألوان `bg-white`, `bg-slate-50`, `text-slate-900` بـ CSS variables أو Tailwind `dark:` classes.
+
+> [!IMPORTANT]
+> هذا البند هو الأكبر حجماً في المشروع بالكامل. يُنصح بتنفيذه كمهمة منفصلة بعد استقرار كل شيء آخر.
+
+---
+
+## المرحلة 5: ميزات متقدمة للتطبيق الأصلي (Native Features)
+
+> **الهدف:** ميزات ترفع قيمة التطبيق كتطبيق هاتف منافس.
+
+### 5.1 مركز الإشعارات الداخلي (In-App Notification Center)
+
+#### [NEW] `src/components/NotificationCenter.tsx`
+
+- جرس إشعارات في الهيدر يعرض عدد الإشعارات غير المقروءة.
+- عند الضغط: Drawer يعرض آخر الإشعارات مع إمكانية التنقل للمهمة المعنية.
+
+#### [NEW] جدول `notifications` في قاعدة البيانات
+
+```sql
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT,
+  is_read BOOLEAN DEFAULT false,
+  link TEXT, -- '/employee' or '/manager'
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
+```
+
+---
+
+### 5.2 تسجيل دخول بالبصمة (Biometric Auth)
+
+#### تثبيت:
+
+```bash
+npm install @aparajita/capacitor-biometric-auth
+```
+
+#### [NEW] `src/hooks/useBiometricAuth.ts`
+
+- فحص دعم البصمة على الجهاز.
+- حفظ refresh token مشفّر عند أول تسجيل دخول.
+- عند فتح التطبيق: عرض خيار "تسجيل الدخول بالبصمة" بدلاً من كتابة كلمة المرور.
+
+---
+
+### 5.3 Deep Linking لروابط البريد (Password Reset)
+
+**المشكلة:** عندما يضغط المستخدم على رابط استعادة كلمة المرور في البريد، يفتح المتصفح الخارجي بدلاً من التطبيق.
+
+#### [MODIFY] [capacitor.config.ts](file:///d:/CP+/taskflow/capacitor.config.ts)
+
+- إضافة App Links / Universal Links:
+
+```typescript
+server: {
+  androidScheme: 'https',
+  hostname: 'taskflow.app', // نطاق الإنتاج
+}
+```
+
+#### [MODIFY] Android `AndroidManifest.xml` + iOS `Info.plist`
+
+- تسجيل URL Scheme.
+
+---
+
+### 5.4 تأمين اتصال الشبكة
+
+#### [MODIFY] [capacitor.config.ts](file:///d:/CP+/taskflow/capacitor.config.ts)
+
+```typescript
+server: {
+  androidScheme: 'https',
+  allowNavigation: [
+    'bzsmwmkgmropuadpkcku.supabase.co',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com'
+  ]
+}
+```
+
+---
+
+## المرحلة 6: تقارير الأعطال ومراقبة الأداء (Observability)
+
+### 6.1 إضافة Crash Reporting
+
+#### تثبيت:
+
+```bash
+npm install @sentry/react
+```
+
+#### [NEW] `src/lib/sentry.ts`
+
+- تهيئة Sentry مع DSN.
+- ربطه بـ Error Boundary.
+
+### 6.2 إضافة Haptic Feedback
+
+#### تثبيت:
+
+```bash
+npm install @capacitor/haptics
+npx cap sync
+```
+
+#### [NEW] `src/lib/haptics.ts`
+
+- دالة مساعدة `vibrate(type: 'light' | 'medium' | 'heavy')`.
+- استخدامها عند تغيير حالة المهمة وحذف الموظف والضغط على الأزرار المهمة.
+
+---
+
+## 📊 ملخص المراحل والجدول الزمني
+
+| المرحلة       | الوصف                           | عدد البنود | الأولوية    | الجهد التقديري |
+| :------------ | :------------------------------ | :--------- | :---------- | :------------- |
+| **المرحلة 1** | إصلاحات حرجة تمنع النشر         | 6 بنود     | 🔴 عاجلة    | 3-4 ساعات      |
+| **المرحلة 2** | تحسينات أمنية                   | 3 بنود     | 🟠 مهمة     | 1-2 ساعة       |
+| **المرحلة 3** | Error Boundary + Code Splitting | 3 بنود     | 🟠 مهمة     | 2-3 ساعات      |
+| **المرحلة 4** | تحسينات تجربة الهاتف            | 4 بنود     | 🟡 مفيدة    | 2-4 أيام       |
+| **المرحلة 5** | ميزات متقدمة أصلية              | 4 بنود     | 🔵 اختيارية | 3-5 أيام       |
+| **المرحلة 6** | مراقبة وأداء                    | 2 بنود     | 🔵 اختيارية | 2-3 ساعات      |
+
+---
+
+## خطة التحقق (Verification Plan)
+
+### بعد كل مرحلة:
+
+1. `npx tsc --noEmit` — التحقق من صحة الأنواع
+2. `npm run build` — التحقق من نجاح البناء الإنتاجي
+3. `npx cap sync` — مزامنة التطبيق الأصلي
+
+### اختبارات يدوية مطلوبة:
+
+- اختبار بدء مهمة والتحقق من حفظ `start_latitude` في قاعدة البيانات
+- اختبار حذف شركة والتأكد من عدم قدرة مستخدميها على تسجيل الدخول
+- اختبار فتح التطبيق بشبكة ضعيفة والتأكد من عدم ظهور شاشة بيضاء (Error Boundary)
+- اختبار حجم الحزمة بعد Code Splitting (يجب أن ينخفض من 1.6MB لأقل من 500KB للحزمة الأساسية)
+
+---
+
+> [!IMPORTANT]
+> **هل توافق على هذه الخطة؟** يمكنك:
+>
+> - الموافقة على التنفيذ من المرحلة 1 فوراً
+> - تعديل الأولويات أو حذف/إضافة بنود
+> - تحديد مراحل معينة للتنفيذ الآن وتأجيل الباقي

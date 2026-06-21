@@ -49,7 +49,8 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Phase 2: UX & Interactivity:** Integrated KPI metrics cards for employee performance, date range filter for manager dashboards, and company settings with logo upload and storage buckets.
 * **Phase 3: Data Integrity & Offline:** Integrated offline React Query local persistence with custom Capacitor Preferences adapter and introduced audit activity logger (`useActivityLog`).
 * **Phase 4: Production Hardening:** Resolved company types mismatch, fixed React Modal nesting bugs in Employee/Manager dashboards, and enabled PWA Service Worker.
-* **Phase 5: Future Growth & Multi-language:** Verified Landing Page routing, implemented lightweight type-safe translation context with dynamic RTL/LTR layout switcher for English/Arabic languages.
+* **Phase 5: Future Growth & Multi-language (completed):** Verified Landing Page routing, implemented translation context with dynamic RTL/LTR layout switcher. Expanded with Phase 5.3-5.7 mobile additions: Notification Center drawer, Biometrics Auth (Passkeys + Preferences), custom scheme Deep Linking (`com.taskflow.app://`), Offline Map fallbacks, and native PDF/HTML export sharing sheets.
+* **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting inside `main.tsx` and unified `ErrorBoundary.tsx`. Integrated native `@capacitor/haptics` vibration feedback on task states, edits, updates, and application crash events.
 * **Build Verification:** Successfully verified TypeScript compilation (`npx tsc --noEmit`) and production build compilation (`npm run build`) with zero errors.
 
 ---
@@ -65,3 +66,22 @@ This file maintains the current structural and functional state of the TaskFlow 
      * `P12_PASSWORD`: Password protecting the `.p12` certificate.
      * `BUILD_PROVISION_PROFILE_BASE64`: Provisioning profile (`.mobileprovision`).
 * **Build Trigger:** Manually triggered via GitHub Actions tab (`iOS Production Build`). Yields a downloadable `app-release.ipa` package that can be shared via Diawi or uploaded to App Store/TestFlight.
+
+---
+
+## 5. Future Architectural Directions
+
+* **Universal Links / App Links:** Transition custom schemes to verified Universal Links (`https://taskflow.com/...`) by deploying domain association files (`apple-app-site-association` and `assetlinks.json`) to prevent deep link hijacking and ensure standard web fallback routing.
+* **Conflict Resolution Strategy:** Formulate concrete merging paradigms (e.g. Last-Write-Wins or user-facing change conflict dialogue) for the offline synchronizer queue when scale reaches millions of concurrent edits.
+* **Telemetry Control:** Restructure the Sentry initialization parameters in production environments to cap reporting rates (e.g., set `tracesSampleRate: 0.1` or lower) and mitigate bandwidth/infrastructure telemetry bills.
+
+---
+
+## 6. Visual Identity & Logo Architecture
+
+* **Unified AppLogo Component (`src/components/AppLogo.tsx`):**
+  * Serves as the single source of truth for the application's visual branding.
+  * Renders the official high-resolution branding image (`/logo.png`) directly in the application headers, sidebars, and entry views.
+  * This guarantees a 100% match with the approved premium logo design (combining glossy reflections, volumetric gradient accents, and precise shading).
+  * Configurations updated in `index.html`, `vite.config.ts` (PWA assets), and `push-worker.js` (Web Push notification icons) to reference `/logo.png`.
+  * Supports dynamic sizing properties (`size`) to fit responsive sidebars (30-32px) and login forms (56px) cleanly.

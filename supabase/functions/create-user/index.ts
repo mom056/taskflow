@@ -10,12 +10,16 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('origin') || '';
+  const productionOrigin = Deno.env.get('ALLOWED_ORIGIN') || '';
   const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "capacitor://localhost",
     "ionic://localhost",
   ];
+  if (productionOrigin) {
+    allowedOrigins.push(productionOrigin);
+  }
   
   const isAllowed = allowedOrigins.includes(origin) || origin.startsWith('http://localhost:');
   
@@ -68,7 +72,7 @@ serve(async (req) => {
     }
 
     const companyId = callerProfile.company_id;
-    if (!companyId) {
+    if (!companyId && callerProfile.role !== 'super_admin') {
       return new Response(JSON.stringify({ error: 'Manager is not assigned to a company' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -213,7 +217,7 @@ serve(async (req) => {
         });
       }
 
-      if (targetUser.company_id !== companyId) {
+      if (targetUser.company_id !== companyId && callerProfile.role !== 'super_admin') {
         return new Response(JSON.stringify({ error: 'Access denied: Target user is in a different tenant' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -309,7 +313,7 @@ serve(async (req) => {
         });
       }
 
-      if (targetUser.company_id !== companyId) {
+      if (targetUser.company_id !== companyId && callerProfile.role !== 'super_admin') {
         return new Response(JSON.stringify({ error: 'Access denied: Target user is in a different tenant' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -331,6 +335,51 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         message: 'User deleted successfully'
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } else if (action === 'delete_company') {
+      const { targetCompanyId } = body;
+      if (!targetCompanyId) {
+        return new Response(JSON.stringify({ error: 'Target Company ID is required for delete_company action' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (callerProfile.role !== 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Access denied: Only super admins can delete company users' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`[AdminRegister] Super Admin ${callerUser.email} is deleting users for company ${targetCompanyId}`);
+
+      // 1. Fetch all users belonging to targetCompanyId
+      const { data: targetUsers, error: fetchUsersError } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('company_id', targetCompanyId);
+
+      if (fetchUsersError) {
+        throw fetchUsersError;
+      }
+
+      // 2. Delete each user from auth (cascades to public.users)
+      if (targetUsers && targetUsers.length > 0) {
+        for (const u of targetUsers) {
+          const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(u.id);
+          if (deleteError) {
+            console.error(`Failed to delete user ${u.id}:`, deleteError.message);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ 
+        message: 'All company users deleted successfully'
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

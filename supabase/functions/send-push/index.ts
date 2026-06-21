@@ -181,6 +181,18 @@ async function sendWebPushNotification(sub: any, payload: string): Promise<{ suc
 // ─── Main Handler ───
 serve(async (req) => {
   try {
+    // Verify Webhook Secret to secure the endpoint
+    const webhookSecret = Deno.env.get('WEBHOOK_SECRET') || '';
+    const incomingSecret = req.headers.get('X-Webhook-Secret') || '';
+
+    if (webhookSecret && incomingSecret !== webhookSecret) {
+      console.warn('[PushService] Unauthorized webhook request.');
+      return new Response(JSON.stringify({ error: 'Unauthorized webhook secret' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     const payload = await req.json();
     console.log('[PushService] Webhook:', payload.type, payload.table);
 

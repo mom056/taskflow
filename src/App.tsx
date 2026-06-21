@@ -1,18 +1,24 @@
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Login from './pages/Login';
-import ResetPassword from './pages/ResetPassword';
-import ManagerDashboard from './pages/ManagerDashboard';
-import EmployeeDashboard from './pages/EmployeeDashboard';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
-import ProfileSettings from './pages/ProfileSettings';
 import LandingPage from './pages/LandingPage';
 import { Toaster } from 'react-hot-toast';
-import { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from './lib/supabase';
+import ErrorBoundary from './components/ErrorBoundary';
+import { AnimatePresence } from 'motion/react';
+import PageTransition from './components/PageTransition';
+import { ThemeProvider } from './contexts/ThemeContext';
+
+// Code splitting dashboards and sub-pages
+const Login = React.lazy(() => import('./pages/Login'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+const ManagerDashboard = React.lazy(() => import('./pages/ManagerDashboard'));
+const EmployeeDashboard = React.lazy(() => import('./pages/EmployeeDashboard'));
+const SuperAdminDashboard = React.lazy(() => import('./pages/SuperAdminDashboard'));
+const ProfileSettings = React.lazy(() => import('./pages/ProfileSettings'));
 
 const Router = Capacitor.isNativePlatform() ? HashRouter : BrowserRouter;
 
@@ -26,6 +32,7 @@ function CapacitorHandlers() {
 
     let activeListener: any = null;
     let backListener: any = null;
+    let urlOpenListener: any = null;
 
     async function setupNativeHandlers() {
       const { App: CapApp } = await import('@capacitor/app');
@@ -73,6 +80,50 @@ function CapacitorHandlers() {
           navigate(-1);
         }
       });
+
+      // 4. Handle Deep Links (Password Reset / Universal Links)
+      urlOpenListener = await CapApp.addListener('appUrlOpen', async (event: any) => {
+        console.log('[DeepLink] App opened with URL:', event.url);
+        try {
+          const urlStr = event.url;
+          // Standardise scheme for URL constructor
+          const cleanUrlStr = urlStr.replace('com.taskflow.app://', 'https://placeholder.com/');
+          const urlObj = new URL(cleanUrlStr);
+          
+          if (urlObj.pathname.includes('reset-password') || urlObj.hash.includes('reset-password') || urlStr.includes('reset-password')) {
+            const hash = urlObj.hash || (urlStr.includes('#') ? urlStr.split('#')[1] : '');
+            let accessToken = '';
+            let refreshToken = '';
+
+            if (hash) {
+              const hashParams = new URLSearchParams(hash.replace('#', '').split('?')[0]);
+              accessToken = hashParams.get('access_token') || '';
+              refreshToken = hashParams.get('refresh_token') || '';
+            }
+
+            if (!accessToken || !refreshToken) {
+              const searchParams = urlObj.searchParams;
+              accessToken = searchParams.get('access_token') || '';
+              refreshToken = searchParams.get('refresh_token') || '';
+            }
+
+            if (accessToken && refreshToken) {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              });
+              
+              if (!error) {
+                navigate('/reset-password');
+              } else {
+                console.error('[DeepLink] SetSession error:', error);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[DeepLink] Failed parsing URL:', err);
+        }
+      });
     }
 
     setupNativeHandlers();
@@ -80,52 +131,78 @@ function CapacitorHandlers() {
     return () => {
       if (activeListener) activeListener.remove();
       if (backListener) backListener.remove();
+      if (urlOpenListener) urlOpenListener.remove();
     };
   }, [queryClient, navigate, location.pathname]);
 
   return null;
 }
 
-function App() {
+function PageSkeleton() {
   return (
-    <Router>
-      <CapacitorHandlers />
-      <AuthProvider>
-        <div className="min-h-screen bg-slate-50 font-sans" dir="rtl">
-          <Toaster position="top-center" toastOptions={{ style: { fontFamily: 'inherit' } }} />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 gap-4" dir="rtl">
+      <div className="w-12 h-12 rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-slate-800 dark:border-t-slate-200 animate-spin" />
+      <p className="text-slate-400 dark:text-slate-500 text-sm font-medium">جاري تحميل الصفحة...</p>
+    </div>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200" dir="rtl">
+      <Toaster position="top-center" toastOptions={{ style: { fontFamily: 'inherit' } }} />
+      <Suspense fallback={<PageSkeleton />}>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+            <Route path="/reset-password" element={<PageTransition><ResetPassword /></PageTransition>} />
 
             <Route path="/manager/*" element={
               <ProtectedRoute allowedRole="manager">
-                <ManagerDashboard />
+                <PageTransition><ManagerDashboard /></PageTransition>
               </ProtectedRoute>
             } />
 
             <Route path="/employee/*" element={
               <ProtectedRoute allowedRole="employee">
-                <EmployeeDashboard />
+                <PageTransition><EmployeeDashboard /></PageTransition>
               </ProtectedRoute>
             } />
 
             <Route path="/super-admin/*" element={
               <ProtectedRoute allowedRole="super_admin">
-                <SuperAdminDashboard />
+                <PageTransition><SuperAdminDashboard /></PageTransition>
               </ProtectedRoute>
             } />
 
             <Route path="/profile" element={
               <ProtectedRoute>
-                <ProfileSettings />
+                <PageTransition><ProfileSettings /></PageTransition>
               </ProtectedRoute>
             } />
 
             <Route path="/" element={<RootRedirect />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </div>
-      </AuthProvider>
+        </AnimatePresence>
+      </Suspense>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <CapacitorHandlers />
+      <ThemeProvider>
+        <AuthProvider>
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 }

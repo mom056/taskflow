@@ -100,6 +100,19 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
           .single();
           
         if (error) throw error;
+        
+        // Notify assigned employee if present
+        if (formData.employeeId) {
+          await supabase.from('notifications').insert([{
+            user_id: formData.employeeId,
+            title: language === 'ar' ? 'مهمة جديدة مسندة إليك' : 'New Task Assigned to You',
+            body: formData.title,
+            link: '/employee',
+            company_id: profile?.company_id,
+            created_at: Date.now()
+          }]);
+        }
+
         logActivity('task_created', 'task', data?.id, { title: formData.title });
         toast.success(language === 'ar' ? 'تمت إضافة المهمة بنجاح' : 'Task created successfully');
       }

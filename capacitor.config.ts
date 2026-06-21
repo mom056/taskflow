@@ -5,7 +5,11 @@ const config: CapacitorConfig = {
   appName: 'TaskFlow',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    allowNavigation: [
+      'bzsmwmkgmropuadpkcku.supabase.co',
+      '*.supabase.co'
+    ]
   },
   plugins: {
     SplashScreen: {

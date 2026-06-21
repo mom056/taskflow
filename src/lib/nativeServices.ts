@@ -201,3 +201,28 @@ export async function registerNativePushToken(userId: string, companyId: string)
     PushNotifications.register();
   });
 }
+
+// Helper to trigger haptic feedback vibrations
+export async function triggerHaptic(type: 'success' | 'error' | 'light'): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Haptics, ImpactStyle, NotificationType } = await import('@capacitor/haptics');
+      
+      switch (type) {
+        case 'success':
+          await Haptics.notification({ type: NotificationType.Success });
+          break;
+        case 'error':
+          await Haptics.notification({ type: NotificationType.Warning });
+          break;
+        case 'light':
+          await Haptics.impact({ style: ImpactStyle.Light });
+          break;
+        default:
+          await Haptics.vibrate();
+      }
+    } catch (err) {
+      console.warn('[Haptic] Failed to trigger vibration feedback:', err);
+    }
+  }
+}

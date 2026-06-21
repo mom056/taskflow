@@ -7,13 +7,37 @@ import toast from 'react-hot-toast';
 import imageCompression from 'browser-image-compression';
 import { useTranslation } from '../contexts/LanguageContext';
 import { useActivityLog } from '../hooks/useActivityLog';
+import { useBiometricAuth } from '../hooks/useBiometricAuth';
+import { triggerHaptic } from '../lib/nativeServices';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const { user, profile, refreshRole, company } = useAuth();
   const { logActivity } = useActivityLog();
   const { t, language, changeLanguage } = useTranslation();
+  const { theme, setTheme } = useTheme();
+  const { isSupported: isBiometricSupported, isEnabled: isBiometricEnabled, registerBiometric, disableBiometric } = useBiometricAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleToggleBiometrics = async () => {
+    if (isBiometricEnabled) {
+      await disableBiometric();
+      triggerHaptic('success');
+      toast.success(language === 'ar' ? 'تم إلغاء تفعيل البصمة' : 'Biometric login disabled');
+    } else {
+      try {
+        const success = await registerBiometric(profile?.name || user?.email || 'User');
+        if (success) {
+          triggerHaptic('success');
+          toast.success(language === 'ar' ? 'تم تفعيل الدخول بالبصمة بنجاح ✓' : 'Biometric login enabled successfully ✓');
+        }
+      } catch (err: any) {
+        triggerHaptic('error');
+        toast.error(err.message || (language === 'ar' ? 'فشل إعداد البصمة' : 'Failed to setup biometrics'));
+      }
+    }
+  };
 
   // Profile fields
   const [name, setName] = useState(profile?.name || '');
@@ -68,6 +92,7 @@ export default function ProfileSettings() {
 
       if (error) throw error;
       
+      triggerHaptic('success');
       // Update auth user if email changed
       if (email.trim().toLowerCase() !== user?.email?.toLowerCase()) {
         const { error: authError } = await supabase.auth.updateUser({ email: email.trim() });
@@ -83,6 +108,7 @@ export default function ProfileSettings() {
       
       await refreshRole();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تحديث البيانات' : 'Could not update profile'));
     } finally {
       setUpdatingProfile(false);
@@ -132,9 +158,11 @@ export default function ProfileSettings() {
       if (dbError) throw dbError;
 
       setAvatarUrl(publicUrl);
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث الصورة الشخصية بنجاح' : 'Profile picture updated successfully', { id: 'avatar-upload' });
       await refreshRole();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'فشل رفع الصورة' : 'Failed to upload image'), { id: 'avatar-upload' });
     } finally {
       setUploadingAvatar(false);
@@ -152,10 +180,12 @@ export default function ProfileSettings() {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password updated successfully');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تغيير كلمة المرور' : 'Could not change password'));
     } finally {
       setUpdatingPassword(false);
@@ -178,9 +208,11 @@ export default function ProfileSettings() {
       if (error) throw error;
 
       logActivity('company_settings_updated', 'company', company.id, { name: companyName.trim() });
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث اسم الشركة بنجاح' : 'Company name updated successfully');
       await refreshRole();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تحديث اسم الشركة' : 'Could not update company name'));
     } finally {
       setUpdatingCompany(false);
@@ -232,9 +264,11 @@ export default function ProfileSettings() {
 
       logActivity('company_settings_updated', 'company', company.id, { logoUrl: publicUrl });
       setLogoUrl(publicUrl);
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث شعار الشركة بنجاح' : 'Company logo updated successfully', { id: 'logo-upload' });
       await refreshRole();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'فشل رفع الشعار' : 'Failed to upload logo'), { id: 'logo-upload' });
     } finally {
       setUploadingLogo(false);
@@ -275,6 +309,7 @@ export default function ProfileSettings() {
       }
 
       logActivity('employee_added', 'user', data?.user?.id || null, { name: newEmpName, email: newEmpEmail, role: newEmpRole });
+      triggerHaptic('success');
       toast.success(
         language === 'ar' 
           ? `تم تسجيل ${newEmpRole === 'manager' ? 'مدير' : 'موظف'} جديد بنجاح: ${newEmpName}`
@@ -284,6 +319,7 @@ export default function ProfileSettings() {
       setNewEmpEmail('');
       setNewEmpPassword('');
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'فشل تسجيل الحساب' : 'Failed to register account'));
     } finally {
       setRegistering(false);
@@ -462,12 +498,12 @@ export default function ProfileSettings() {
             </button>
           </form>
 
-          {/* Form 3: Application Settings (Language Switcher) */}
+          {/* Form 3: Application Settings (Language & Theme Switcher) */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
-              <span className="w-7 h-7 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center text-sm font-bold">🌐</span>
+              <span className="w-7 h-7 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center text-sm font-bold">⚙️</span>
               <h3 className="font-bold text-slate-800 text-sm">
-                {language === 'ar' ? 'إعدادات اللغة' : 'Language Settings'}
+                {language === 'ar' ? 'إعدادات التطبيق' : 'Application Settings'}
               </h3>
             </div>
             
@@ -500,6 +536,64 @@ export default function ProfileSettings() {
                 </button>
               </div>
             </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-50">
+              <label className="text-xs font-semibold text-slate-500">
+                {language === 'ar' ? 'مظهر التطبيق' : 'App Appearance'}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTheme('light')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer flex items-center justify-center gap-1.5 ${
+                    theme === 'light'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  ☀️ {language === 'ar' ? 'مضيء' : 'Light'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme('dark')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer flex items-center justify-center gap-1.5 ${
+                    theme === 'dark'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  🌙 {language === 'ar' ? 'داكن' : 'Dark'}
+                </button>
+              </div>
+            </div>
+
+            {isBiometricSupported && (
+              <div className="space-y-2 pt-2 border-t border-slate-50">
+                <label className="text-xs font-semibold text-slate-500">
+                  {language === 'ar' ? 'تسجيل الدخول بالبصمة' : 'Biometric Login'}
+                </label>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    {language === 'ar' 
+                      ? 'تفعيل تسجيل الدخول السريع ببصمة الوجه / الأصبع' 
+                      : 'Enable quick login with Face ID / Touch ID'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleToggleBiometrics}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer shrink-0 ${
+                      isBiometricEnabled
+                        ? 'bg-green-600 border-green-600 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {isBiometricEnabled 
+                      ? (language === 'ar' ? 'مفعّل ✓' : 'Enabled ✓') 
+                      : (language === 'ar' ? 'تفعيل' : 'Enable')}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

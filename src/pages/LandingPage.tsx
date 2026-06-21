@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { Target, MapPin, Cloud, BarChart3, Users, ArrowLeft, CheckCircle, Zap, Shield } from 'lucide-react';
+import { MapPin, Cloud, BarChart3, Users, ArrowLeft, CheckCircle, Zap, Shield } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
+import AppLogo from '../components/AppLogo';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -19,14 +20,7 @@ export default function LandingPage() {
       {/* Header / Navbar */}
       <header className="border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-50 bg-slate-900/90">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-600/20">
-              <Target className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-black bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
-              {t.common.appName}
-            </span>
-          </div>
+          <AppLogo size={36} theme="dark" />
           
           <div className="flex items-center gap-4">
             <button 

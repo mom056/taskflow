@@ -32,7 +32,7 @@ export default function MobileBottomNav({ activeTab, onChange }: MobileBottomNav
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-50 shadow-[0_-2px_16px_rgba(0,0,0,0.06)]"
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-50 shadow-[0_-2px_16px_rgba(0,0,0,0.06)] safe-pb"
       dir={language === 'ar' ? 'rtl' : 'ltr'}
     >
       {items.map(item => (

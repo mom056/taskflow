@@ -14,7 +14,7 @@ export interface ActivityLog {
   actorName?: string;
 }
 
-export function useActivityLog() {
+export function useActivityLog(fetchLogs: boolean = true) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
@@ -44,7 +44,7 @@ export function useActivityLog() {
         actorName: row.actor?.name || 'مستخدم غير معروف'
       }));
     },
-    enabled: !!profile?.company_id,
+    enabled: fetchLogs && !!profile?.company_id,
   });
 
   const logMutation = useMutation({

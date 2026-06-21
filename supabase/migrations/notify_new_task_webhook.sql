@@ -42,11 +42,11 @@ BEGIN
   );
 
   -- Send async HTTP POST to the Edge Function via pg_net
-  -- No Authorization header needed (function deployed with --no-verify-jwt)
+  -- Pass custom X-Webhook-Secret to authorize the webhook trigger
   PERFORM net.http_post(
     url := edge_url,
     body := payload,
-    headers := '{"Content-Type": "application/json"}'::jsonb
+    headers := '{"Content-Type": "application/json", "X-Webhook-Secret": "cf089e82-4f36-4d1a-82ee-062db28b936a"}'::jsonb
   );
 
   RETURN NEW;

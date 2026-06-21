@@ -1,26 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">
   <defs>
-    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="taskflow-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#1d4ed8" />
+      <stop offset="60%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#1e3a8a" flood-opacity="0.15" />
-    </filter>
   </defs>
-  <!-- Background Card -->
-  <rect width="460" height="460" x="26" y="26" rx="100" fill="url(#blueGrad)" filter="url(#shadow)" />
-  <!-- Clipboard Body -->
-  <rect width="200" height="240" x="156" y="156" rx="20" fill="#ffffff" />
-  <!-- Clipboard Header/Clip -->
-  <rect width="100" height="40" x="206" y="126" rx="10" fill="#e2e8f0" />
-  <rect width="60" height="20" x="226" y="116" rx="5" fill="#94a3b8" />
-  <!-- Task lines -->
-  <rect width="120" height="12" x="196" y="210" rx="6" fill="#cbd5e1" />
-  <rect width="120" height="12" x="196" y="240" rx="6" fill="#cbd5e1" />
-  <rect width="80" height="12" x="196" y="270" rx="6" fill="#cbd5e1" />
-  <!-- Checkmark Circle -->
-  <circle cx="316" cy="316" r="46" fill="#10b981" />
-  <!-- Checkmark -->
-  <path d="M298 316 l12 12 l24 -24" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Dark background card for premium contrast -->
+  <rect width="32" height="32" rx="7" fill="#0f172a" />
+  
+  <!-- Outer elegant dynamic tracking loop -->
+  <path 
+    d="M6 16C6 9.37258 11.3726 4 18 4C24.6274 4 30 9.37258 30 16C30 22.6274 24.6274 28 18 28C14 28 10.5 26 8 23" 
+    stroke="url(#taskflow-logo-grad)" 
+    stroke-width="2.5" 
+    stroke-linecap="round"
+    stroke-dasharray="4 2"
+    opacity="0.85"
+    fill="none"
+  />
+  
+  <!-- Curved Arrow tip symbolizing movement/flow -->
+  <path 
+    d="M10 25L6 21L4 26" 
+    stroke="url(#taskflow-logo-grad)" 
+    stroke-width="2.5" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Main checkmark with gradient stroke -->
+  <path 
+    d="M11 16.5L15 20.5L25 10" 
+    stroke="url(#taskflow-logo-grad)" 
+    stroke-width="3.5" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+    fill="none"
+  />
 </svg>

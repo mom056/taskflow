@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Task } from '../types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { Capacitor } from '@capacitor/core';
 
 interface ExportReportProps {
   tasks: Task[];
@@ -116,11 +117,64 @@ export function useReportExport({ tasks, getEmployeeName }: ExportReportProps) {
     });
 
     // Save File
-    doc.save(`TaskFlow_Report_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    const filename = `TaskFlow_Report_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`;
+    
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+
+        // Output as base64 string
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+        // Write file to Cache directory so it can be shared
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: pdfBase64,
+          directory: Directory.Cache
+        });
+
+        // Share native file
+        await Share.share({
+          title: 'تقرير المهام الميدانية',
+          text: 'تقرير المهام والزيارات الميدانية من تطبيق TaskFlow',
+          url: writeResult.uri,
+          dialogTitle: 'تصدير التقرير'
+        });
+      } catch (err: any) {
+        console.error('[PDF Export Native] Error:', err);
+      }
+    } else {
+      doc.save(filename);
+    }
   };
 
   // 2. High-Fidelity Native Print View (HTML formatting with charts & Arabic shaping)
-  const printReportHTML = () => {
+  const printReportHTML = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { Share } = await import('@capacitor/share');
+        // Shape summary text for mobile sharing sheet
+        const completedCount = tasks.filter(t => t.status === 'completed').length;
+        const progressCount = tasks.filter(t => t.status === 'in_progress').length;
+        
+        const summaryText = `تقرير المهام والزيارات الميدانية - TaskFlow\n\n` + 
+          `إجمالي المهام: ${tasks.length}\n` + 
+          `المكتملة: ${completedCount}\n` +
+          `جاري العمل: ${progressCount}\n\n` +
+          tasks.map(t => `- ${t.title} (${t.status === 'completed' ? 'مكتملة' : 'جاري العمل'})`).join('\n');
+
+        await Share.share({
+          title: 'ملخص التقرير الميداني',
+          text: summaryText,
+          dialogTitle: 'مشاركة ملخص التقرير'
+        });
+      } catch (err) {
+        console.error('[Print Native] Error:', err);
+      }
+      return;
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 

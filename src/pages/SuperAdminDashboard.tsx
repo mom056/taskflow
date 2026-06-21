@@ -9,6 +9,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../contexts/LanguageContext';
+import PullToRefresh from '../components/PullToRefresh';
+import NotificationCenter from '../components/NotificationCenter';
+import { triggerHaptic } from '../lib/nativeServices';
+import AppLogo from '../components/AppLogo';
 
 interface CompanyAdminView {
   id: string;
@@ -170,6 +174,7 @@ export default function SuperAdminDashboard() {
 
       if (error) throw error;
 
+      triggerHaptic('success');
       toast.success(
         language === 'ar' 
           ? `تم تنشيط شركة "${comp.name}"` 
@@ -177,6 +182,7 @@ export default function SuperAdminDashboard() {
       );
       fetchData();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تعديل حالة النشاط للشركة' : 'Could not modify company active status'));
     }
   };
@@ -191,6 +197,7 @@ export default function SuperAdminDashboard() {
 
       if (error) throw error;
 
+      triggerHaptic('success');
       toast.success(
         language === 'ar' 
           ? `تم إيقاف شركة "${suspendingCompany.name}" مؤقتاً`
@@ -199,6 +206,7 @@ export default function SuperAdminDashboard() {
       setSuspendingCompany(null);
       fetchData();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تعديل حالة النشاط للشركة' : 'Could not modify company active status'));
     }
   };
@@ -220,10 +228,12 @@ export default function SuperAdminDashboard() {
 
       if (error) throw error;
 
+      triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث الشركة وباقة الاشتراك بنجاح' : 'Company and subscription plan updated successfully');
       setEditingCompany(null);
       fetchData();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر تحديث إعدادات الشركة' : 'Could not update company settings'));
     } finally {
       setIsSaving(false);
@@ -270,6 +280,7 @@ export default function SuperAdminDashboard() {
 
       if (error) throw error;
 
+      triggerHaptic('success');
       toast.success(
         language === 'ar' 
           ? `تم إنشاء شركة "${newCompName.trim()}" بنجاح`
@@ -281,6 +292,7 @@ export default function SuperAdminDashboard() {
       setNewCompMaxEmp(5);
       fetchData();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر إنشاء الشركة' : 'Could not create company'));
     } finally {
       setIsAdding(false);
@@ -292,13 +304,16 @@ export default function SuperAdminDashboard() {
 
     setIsDeleting(true);
     try {
-      // Delete all users belonging to this company first
-      const { error: usersError } = await supabase
-        .from('users')
-        .delete()
-        .eq('company_id', deletingCompany.id);
+      // Delete all users belonging to this company from auth (cascades to public.users)
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'delete_company',
+          targetCompanyId: deletingCompany.id
+        }
+      });
 
-      if (usersError) throw usersError;
+      if (edgeError) throw new Error(edgeError.message || 'Failed to delete company users from Auth');
+      if (edgeData?.error) throw new Error(edgeData.error);
 
       // Then delete the company
       const { error: compError } = await supabase
@@ -308,6 +323,7 @@ export default function SuperAdminDashboard() {
 
       if (compError) throw compError;
 
+      triggerHaptic('success');
       toast.success(
         language === 'ar' 
           ? `تم حذف شركة "${deletingCompany.name}" وجميع موظفيها بنجاح`
@@ -316,6 +332,7 @@ export default function SuperAdminDashboard() {
       setDeletingCompany(null);
       fetchData();
     } catch (err: any) {
+      triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'تعذر حذف الشركة' : 'Could not delete company'));
     } finally {
       setIsDeleting(false);
@@ -328,10 +345,7 @@ export default function SuperAdminDashboard() {
       {/* ── SIDEBAR ── */}
       <aside className={`w-[260px] bg-slate-900 text-slate-300 flex-col p-6 shrink-0 z-10 hidden md:flex border-slate-800 ${language === 'ar' ? 'border-l' : 'border-r'}`}>
         <div className="mb-10">
-          <div className="text-2xl font-bold text-white flex items-center gap-2">
-            <Shield className="w-7 h-7 text-blue-500" />
-            TaskFlow SaaS
-          </div>
+          <AppLogo size={32} theme="dark" showText={true} />
           <div className="text-[10px] text-blue-400 font-semibold mt-1 tracking-wider uppercase">
             {language === 'ar' ? 'لوحة المشرف العام' : 'Super Admin Dashboard'}
           </div>
@@ -388,9 +402,12 @@ export default function SuperAdminDashboard() {
               </span>
             </div>
           </Link>
-          <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-800 rounded-full border-none bg-transparent cursor-pointer">
-            <LogOut className="w-4 h-4 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-800 rounded-full border-none bg-transparent cursor-pointer">
+              <LogOut className="w-4 h-4 text-slate-400" />
+            </button>
+          </div>
         </header>
 
         {/* Desktop Header */}
@@ -403,16 +420,21 @@ export default function SuperAdminDashboard() {
               {language === 'ar' ? 'مراقبة باقات الخدمة لجميع عملاء المنصة' : 'Monitor service packages for all platform clients'}
             </p>
           </div>
-          <button 
-            onClick={fetchData} 
-            className="p-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <RefreshCcw className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            <NotificationCenter />
+            <button 
+              onClick={fetchData} 
+              className="p-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <RefreshCcw className="w-4 h-4" />
+            </button>
+          </div>
         </header>
 
         {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto relative p-4 md:p-8 space-y-6">
+        <div className="flex-1 overflow-y-auto relative">
+          <PullToRefresh onRefresh={fetchData}>
+            <div className="p-4 md:p-8 space-y-6">
           {isLoading && (
             <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center">
               <div className="rounded-full h-8 w-8 bg-blue-600 animate-ping" />
@@ -649,6 +671,8 @@ export default function SuperAdminDashboard() {
               </table>
             </div>
           </div>
+            </div>
+          </PullToRefresh>
         </div>
       </main>
 

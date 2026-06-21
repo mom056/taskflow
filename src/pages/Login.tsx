@@ -2,15 +2,18 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, Target } from 'lucide-react';
+import { Mail, Lock, Fingerprint } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../contexts/LanguageContext';
+import { AppLogoIcon } from '../components/AppLogo';
+import { useBiometricAuth } from '../hooks/useBiometricAuth';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { refreshRole, user } = useAuth();
   const { t, language, changeLanguage } = useTranslation();
+  const { isSupported: isBiometricSupported, isEnabled: isBiometricEnabled, loginWithBiometrics } = useBiometricAuth();
   const mounted = useRef(true);
 
   const [isLogin, setIsLogin] = useState(() => {
@@ -151,6 +154,23 @@ export default function Login() {
     }
   };
 
+  const handleBiometricLogin = async () => {
+    setLoading(true);
+    try {
+      const success = await loginWithBiometrics();
+      if (success) {
+        await refreshRole();
+        toast.success(language === 'ar' ? 'تم تسجيل الدخول بالبصمة بنجاح ✓' : 'Logged in with biometrics successfully ✓');
+      }
+    } catch (err: any) {
+      toast.error(err.message || (language === 'ar' ? 'فشل تسجيل الدخول بالبصمة' : 'Biometric login failed'));
+    } finally {
+      if (mounted.current) {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 relative" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Language Switcher absolute corner */}
@@ -165,8 +185,8 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white rounded-4xl shadow-sm border border-slate-200 p-8">
         <div className="text-center mb-10">
-          <div className="mx-auto bg-blue-50 h-16 w-16 rounded-2xl flex items-center justify-center mb-6">
-            <Target className="h-8 w-8 text-blue-600" />
+          <div className="mx-auto h-16 w-16 flex items-center justify-center mb-6">
+            <AppLogoIcon size={56} />
           </div>
           <h2 className="text-3xl font-bold text-slate-900">{t.common.appName}</h2>
           <p className="text-slate-500 mt-2 font-medium">{t.landing.subtitle}</p>
@@ -243,15 +263,29 @@ export default function Login() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !isSupabaseConfigured}
-              className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 mt-8 cursor-pointer"
-            >
-              {loading ? (
-                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (isLogin ? t.login.btnSignIn : t.login.btnSignUp)}
-            </button>
+            <div className="flex gap-3 mt-8">
+              <button
+                type="submit"
+                disabled={loading || !isSupabaseConfigured}
+                className="flex-1 flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? (
+                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (isLogin ? t.login.btnSignIn : t.login.btnSignUp)}
+              </button>
+
+              {isLogin && isBiometricSupported && isBiometricEnabled && (
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  disabled={loading}
+                  className="px-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition cursor-pointer flex items-center justify-center text-slate-600 shadow-xs dark:border-slate-800 bg-white"
+                  title={language === 'ar' ? 'تسجيل الدخول بالبصمة' : 'Biometric Login'}
+                >
+                  <Fingerprint className="h-6 w-6 text-slate-600" />
+                </button>
+              )}
+            </div>
           </form>
 
           {/* Forgot Password Link */}
