@@ -5,7 +5,6 @@ import './index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { persistQueryClient } from '@tanstack/react-query-persist-client';
 import { Preferences } from '@capacitor/preferences';
-import { registerSW } from 'virtual:pwa-register';
 
 import { LanguageProvider } from './contexts/LanguageContext';
 import * as Sentry from '@sentry/react';
@@ -74,7 +73,13 @@ persistQueryClient({
 
 // Register PWA service worker
 if (import.meta.env.VITE_PLATFORM !== 'native') {
-  registerSW({ immediate: true });
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => {
+      registerSW({ immediate: true });
+    })
+    .catch((err) => {
+      console.warn('[PWA] Service worker registration module failed to load:', err);
+    });
 }
 
 createRoot(document.getElementById('root')!).render(
