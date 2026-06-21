@@ -41,11 +41,6 @@ export default defineConfig({
       }
     })
   ].filter(Boolean),
-  build: {
-    rollupOptions: {
-      external: isNative ? ['virtual:pwa-register'] : [],
-    },
-  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

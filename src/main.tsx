@@ -71,15 +71,17 @@ persistQueryClient({
   maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
 });
 
-// Register PWA service worker
-if (import.meta.env.VITE_PLATFORM !== 'native') {
-  import('virtual:pwa-register')
-    .then(({ registerSW }) => {
-      registerSW({ immediate: true });
-    })
-    .catch((err) => {
-      console.warn('[PWA] Service worker registration module failed to load:', err);
-    });
+// Register PWA service worker using standard vanilla Web API
+if (import.meta.env.VITE_PLATFORM !== 'native' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => {
+        console.log('[PWA] Service Worker registered successfully:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
