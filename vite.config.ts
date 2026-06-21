@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    !isNative && VitePWA({
+    VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['logo.png'],
       manifest: {
@@ -40,7 +40,7 @@ export default defineConfig({
         importScripts: ['/push-worker.js']
       }
     })
-  ].filter(Boolean),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
