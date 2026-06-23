@@ -136,15 +136,33 @@ body {
 /* Custom logo loader animations */
 @keyframes logo-breath {
   0%, 100% {
-    transform: scale(0.92);
-    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.25));
+    transform: scale(0.95);
   }
   50% {
-    transform: scale(1.06);
-    filter: drop-shadow(0 0 22px rgba(59, 130, 246, 0.6));
+    transform: scale(1.05);
+  }
+}
+
+@keyframes logo-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
   }
 }
 
 .animate-logo-breath {
-  animation: logo-breath 2.2s ease-in-out infinite;
+  animation: logo-breath 2s ease-in-out infinite;
+}
+
+.animate-logo-ripple {
+  animation: logo-ripple 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.animate-logo-ripple-delayed {
+  animation: logo-ripple 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: 1s;
 }
