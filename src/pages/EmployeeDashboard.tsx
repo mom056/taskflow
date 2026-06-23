@@ -40,6 +40,19 @@ export default function EmployeeDashboard() {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isLogoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
+  // Auto-request push notification permissions on first native mobile app open
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && user?.id && !isSubscribed) {
+      // Small timeout to ensure dashboard render is complete and smooth
+      const timer = setTimeout(() => {
+        subscribeUser().catch((err) => {
+          console.log('[PushNotifications] Auto-prompt skipped or failed:', err);
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.id, isSubscribed, subscribeUser]);
+
   // Compute stats for KPI cards
   const stats = useMemo(() => {
     const total = tasks.length;
