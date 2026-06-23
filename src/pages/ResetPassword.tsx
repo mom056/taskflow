@@ -5,6 +5,7 @@ import { Lock, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../contexts/LanguageContext';
 import { AppLogoIcon } from '../components/AppLogo';
+import AppLoader from '../components/AppLoader';
 
 export default function ResetPassword() {
   const [newPassword, setNewPassword] = useState('');
@@ -103,9 +104,8 @@ export default function ResetPassword() {
             </p>
           </div>
         ) : !sessionReady ? (
-          <div className="text-center space-y-4">
-            <div className="w-10 h-10 mx-auto rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-            <p className="text-sm text-slate-400">{language === 'ar' ? 'جاري التحقق من رابط الاستعادة...' : 'Verifying reset link...'}</p>
+          <div className="text-center">
+            <AppLoader text={language === 'ar' ? 'جاري التحقق من رابط الاستعادة...' : 'Verifying reset link...'} size={44} />
             <p className="text-xs text-slate-400 mt-4">
               {language === 'ar' 
                 ? 'إذا لم يتم التحقق خلال ثوانٍ، يرجى التأكد من فتح الرابط الصحيح المرسل إلى بريدك الإلكتروني.'

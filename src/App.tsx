@@ -138,11 +138,12 @@ function CapacitorHandlers() {
   return null;
 }
 
+import AppLoader from './components/AppLoader';
+
 function PageSkeleton() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 gap-4" dir="rtl">
-      <div className="w-12 h-12 rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-slate-800 dark:border-t-slate-200 animate-spin" />
-      <p className="text-slate-400 dark:text-slate-500 text-sm font-medium">جاري تحميل الصفحة...</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950" dir="rtl">
+      <AppLoader size={60} />
     </div>
   );
 }
@@ -213,9 +214,8 @@ function RootRedirect() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4" dir="rtl">
-        <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-        <p className="text-slate-400 text-sm font-medium">جاري التحميل...</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950" dir="rtl">
+        <AppLoader size={60} />
       </div>
     );
   }

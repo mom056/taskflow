@@ -19,6 +19,7 @@ import { useTranslation } from '../contexts/LanguageContext';
 import PullToRefresh from '../components/PullToRefresh';
 import NotificationCenter from '../components/NotificationCenter';
 import AppLogo from '../components/AppLogo';
+import AppLoader from '../components/AppLoader';
 
 export default function EmployeeDashboard() {
   const { signOut, user, profile, company } = useAuth();
@@ -525,8 +526,8 @@ export default function EmployeeDashboard() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-slate-50">
           {isLoading && (
-            <div className="absolute inset-0 bg-white/60 backdrop-blur-xs z-20 flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
+            <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
+              <AppLoader size={44} />
             </div>
           )}
 

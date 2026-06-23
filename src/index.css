@@ -132,3 +132,19 @@ body {
 .dark td {
   border-color: #334155 !important;
 }
+
+/* Custom logo loader animations */
+@keyframes logo-breath {
+  0%, 100% {
+    transform: scale(0.92);
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.25));
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 22px rgba(59, 130, 246, 0.6));
+  }
+}
+
+.animate-logo-breath {
+  animation: logo-breath 2.2s ease-in-out infinite;
+}

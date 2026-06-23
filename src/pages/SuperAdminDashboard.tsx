@@ -13,6 +13,7 @@ import PullToRefresh from '../components/PullToRefresh';
 import NotificationCenter from '../components/NotificationCenter';
 import { triggerHaptic } from '../lib/nativeServices';
 import AppLogo from '../components/AppLogo';
+import AppLoader from '../components/AppLoader';
 
 interface CompanyAdminView {
   id: string;
@@ -441,8 +442,8 @@ export default function SuperAdminDashboard() {
           <PullToRefresh onRefresh={fetchData}>
             <div className="p-4 md:p-8 space-y-6">
           {isLoading && (
-            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center">
-              <div className="rounded-full h-8 w-8 bg-blue-600 animate-ping" />
+            <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
+              <AppLoader size={44} />
             </div>
           )}
 

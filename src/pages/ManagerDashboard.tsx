@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import PullToRefresh from '../components/PullToRefresh';
 import NotificationCenter from '../components/NotificationCenter';
 import AppLogo from '../components/AppLogo';
+import AppLoader from '../components/AppLoader';
 
 import TasksTable from '../components/TasksTable';
 import TaskModal from '../components/TaskModal';
@@ -579,8 +580,8 @@ export default function ManagerDashboard() {
         <div className="flex-1 overflow-y-auto relative">
           <PullToRefresh onRefresh={handleRefresh}>
           {isLoading && (
-            <div className="absolute inset-0 bg-white/60 backdrop-blur-xs z-20 flex items-center justify-center">
-              <div className="rounded-full h-8 w-8 bg-blue-600 animate-ping" />
+            <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
+              <AppLoader size={44} />
             </div>
           )}
 
