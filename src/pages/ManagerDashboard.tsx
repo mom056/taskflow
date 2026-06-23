@@ -118,7 +118,7 @@ export default function ManagerDashboard() {
   // Realtime updates
   useEffect(() => {
     if (!profile?.company_id) return;
-    const channelName = `manager_db_${profile.company_id}_${Date.now()}`;
+    const channelName = `manager_db_${profile.company_id}_${Math.random().toString(36).substring(2, 15)}`;
     const sub = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${profile.company_id}` }, () => {

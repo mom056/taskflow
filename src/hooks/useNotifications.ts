@@ -56,7 +56,7 @@ export function useNotifications() {
     if (!user?.id) return;
 
     // Use a unique channel name per mount cycle to avoid conflicts with stale channels
-    const channelName = `notifications_${user.id}_${Date.now()}`;
+    const channelName = `notifications_${user.id}_${Math.random().toString(36).substring(2, 15)}`;
     const channel = supabase
       .channel(channelName)
       .on(

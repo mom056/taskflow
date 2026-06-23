@@ -131,9 +131,9 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     fetchData();
 
-    const ts = Date.now();
+    const rand = Math.random().toString(36).substring(2, 15);
     const companiesChan = supabase
-      .channel(`companies_all_${ts}`)
+      .channel(`companies_all_${rand}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, () => {
         fetchData();
       })
@@ -142,7 +142,7 @@ export default function SuperAdminDashboard() {
       });
 
     const usersChan = supabase
-      .channel(`users_all_${ts}`)
+      .channel(`users_all_${rand}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
         fetchData();
       })

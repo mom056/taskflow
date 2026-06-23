@@ -111,7 +111,7 @@ export default function EmployeeDashboard() {
   // Realtime
   useEffect(() => {
     if (!user) return;
-    const channelName = `emp_tasks_${user.id}_${Date.now()}`;
+    const channelName = `emp_tasks_${user.id}_${Math.random().toString(36).substring(2, 15)}`;
     const sub = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `employee_id=eq.${user.id}` }, () => {
