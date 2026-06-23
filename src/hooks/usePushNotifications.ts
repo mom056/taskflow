@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Capacitor } from '@capacitor/core';
 import { registerNativePushToken } from '../lib/nativeServices';
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BNn19iLAkbvqnUL0h9eb7CKQzold9yQZ3pJiHimszavMcAJ-OChlo1LJp1jWDGWa9Rt4Sy79vAakrrQXXz6w3R0';
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
 
 // Helper to convert base64 VAPID key to Uint8Array for browser subscription
 function urlBase64ToUint8Array(base64String: string) {

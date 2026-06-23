@@ -2,10 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bzsmwmkgmropuadpkcku.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_VLdhRDLScUw840uLwBNI1w_LVrWuDfU';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = true;
+export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 
 const isNative = Capacitor.isNativePlatform();
 
