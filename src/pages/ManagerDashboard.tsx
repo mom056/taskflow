@@ -118,15 +118,18 @@ export default function ManagerDashboard() {
   // Realtime updates
   useEffect(() => {
     if (!profile?.company_id) return;
+    const channelName = `manager_db_${profile.company_id}_${Date.now()}`;
     const sub = supabase
-      .channel('manager_db_changes')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${profile.company_id}` }, () => {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `company_id=eq.${profile.company_id}` }, () => {
         queryClient.invalidateQueries({ queryKey: ['users'] });
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.warn('[ManagerDashboard] Realtime error (non-fatal):', err.message);
+      });
     return () => { supabase.removeChannel(sub); };
   }, [profile?.company_id, queryClient]);
 

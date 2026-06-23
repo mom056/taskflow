@@ -131,19 +131,24 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     fetchData();
 
+    const ts = Date.now();
     const companiesChan = supabase
-      .channel('companies-all-changes')
+      .channel(`companies_all_${ts}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, () => {
         fetchData();
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.warn('[SuperAdmin] Companies realtime error (non-fatal):', err.message);
+      });
 
     const usersChan = supabase
-      .channel('users-all-changes')
+      .channel(`users_all_${ts}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
         fetchData();
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.warn('[SuperAdmin] Users realtime error (non-fatal):', err.message);
+      });
 
     return () => {
       supabase.removeChannel(companiesChan);

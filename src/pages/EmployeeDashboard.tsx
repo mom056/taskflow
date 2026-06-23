@@ -111,12 +111,15 @@ export default function EmployeeDashboard() {
   // Realtime
   useEffect(() => {
     if (!user) return;
+    const channelName = `emp_tasks_${user.id}_${Date.now()}`;
     const sub = supabase
-      .channel('emp_tasks')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `employee_id=eq.${user.id}` }, () => {
         queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.warn('[EmployeeDashboard] Realtime error (non-fatal):', err.message);
+      });
     return () => { supabase.removeChannel(sub); };
   }, [user, queryClient]);
 

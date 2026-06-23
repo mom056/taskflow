@@ -55,8 +55,10 @@ export function useNotifications() {
   useEffect(() => {
     if (!user?.id) return;
 
+    // Use a unique channel name per mount cycle to avoid conflicts with stale channels
+    const channelName = `notifications_${user.id}_${Date.now()}`;
     const channel = supabase
-      .channel(`notifications:user_id=eq.${user.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -69,7 +71,11 @@ export function useNotifications() {
           queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) {
+          console.warn('[useNotifications] Realtime subscription error (non-fatal):', err.message);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
