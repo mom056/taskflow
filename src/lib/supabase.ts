@@ -2,10 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://taskflow-placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bzsmwmkgmropuadpkcku.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_VLdhRDLScUw840uLwBNI1w_LVrWuDfU';
 
-export const isSupabaseConfigured = !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co';
+export const isSupabaseConfigured = true;
 
 const isNative = Capacitor.isNativePlatform();
 

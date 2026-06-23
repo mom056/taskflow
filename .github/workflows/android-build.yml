@@ -30,6 +30,9 @@ jobs:
       - name: Compile and Sync Native Assets
         env:
           VITE_PLATFORM: native
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
         run: npm run cap:build
 
       - name: Build Android App (APK)
