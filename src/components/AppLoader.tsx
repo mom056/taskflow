@@ -12,7 +12,7 @@ export default function AppLoader({ text, size = 64, className = '' }: AppLoader
   const { language } = useTranslation();
   const loadingText = text || (language === 'ar' ? 'جاري التحميل...' : 'Loading...');
 
-  const logoStyle = "rounded-2xl bg-white dark:bg-slate-900 p-1 border border-slate-100/30 dark:border-slate-800/30 shadow-xs object-contain";
+  const logoStyle = "object-contain shrink-0";
 
   return (
     <div className={`flex flex-col items-center justify-center gap-8 p-6 select-none ${className}`}>
