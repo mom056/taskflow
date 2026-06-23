@@ -2,6 +2,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { useTranslation } from '../contexts/LanguageContext';
+import AppLoader from './AppLoader';
 
 export default function ProtectedRoute({ 
   children, 
@@ -27,17 +28,10 @@ export default function ProtectedRoute({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <div className="rounded-full h-10 w-10 bg-blue-600 animate-ping mb-4"></div>
-        {loadingTime > 3 && (
-           <div className="text-slate-500 font-medium z-50">
-             {language === 'ar' 
-               ? `جاري الدخول للنظام... (${loadingTime} ثانية)` 
-               : `Logging in... (${loadingTime} seconds)`}
-           </div>
-        )}
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950" dir="rtl">
+        <AppLoader size={60} text={language === 'ar' ? 'جاري التحقق من صلاحيات الدخول...' : 'Verifying access permissions...'} />
         {loadingTime > 8 && (
-           <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-200 rounded hover:bg-slate-300 z-50 relative border-none cursor-pointer">
+           <button onClick={() => window.location.reload()} className="mt-4 px-5 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors z-50 relative border-none cursor-pointer font-semibold text-sm">
              {language === 'ar' ? 'تحديث الصفحة' : 'Refresh Page'}
            </button>
         )}
