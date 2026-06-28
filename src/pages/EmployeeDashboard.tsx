@@ -63,6 +63,7 @@ export default function EmployeeDashboard() {
   const [isPermissionGuideOpen, setIsPermissionGuideOpen] = useState(false);
   const [permissionGuideType, setPermissionGuideType] = useState<'gps' | 'push'>('gps');
   const [updateInfo, setUpdateInfo] = useState<{ hasUpdate: boolean; latestTag: string; downloadUrl: string } | null>(null);
+  const [isGpsDenied, setIsGpsDenied] = useState(false);
 
   // Swipe gesture states
   const [touchStart, setTouchStart] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -73,9 +74,20 @@ export default function EmployeeDashboard() {
     getCoordinates()
       .then(coords => {
         setUserCoords(coords);
+        setIsGpsDenied(false);
       })
       .catch(err => {
         console.log('[GPS] Initial coordinates fetch failed or denied:', err);
+        // If it was denied or requires activation, set isGpsDenied to true
+        if (
+          err.message?.includes('صلاحية') || 
+          err.message?.includes('permission') || 
+          err.message?.includes('تفعيل') || 
+          err.message?.includes('disabled') ||
+          err.code === 1
+        ) {
+          setIsGpsDenied(true);
+        }
       });
   }, [getCoordinates]);
 
@@ -106,9 +118,9 @@ export default function EmployeeDashboard() {
     }
   }, [isOnline]);
 
-  // Auto-request push notification permissions on first native mobile app open
+  // Auto-request push notification permissions on first app open
   useEffect(() => {
-    if (Capacitor.isNativePlatform() && user?.id && !isSubscribed) {
+    if (user?.id && !isSubscribed && isOnline) {
       // Small timeout to ensure dashboard render is complete and smooth
       const timer = setTimeout(() => {
         subscribeUser().catch((err) => {
@@ -117,7 +129,7 @@ export default function EmployeeDashboard() {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [user?.id, isSubscribed, subscribeUser]);
+  }, [user?.id, isSubscribed, subscribeUser, isOnline]);
 
   // Compute stats for KPI cards
   const stats = useMemo(() => {
@@ -716,6 +728,53 @@ export default function EmployeeDashboard() {
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{language === 'ar' ? 'تأكد من الاتصال بالإنترنت' : 'Check your internet connection'}</p>
               </div>
               <button onClick={() => window.location.reload()} className="text-xs font-semibold text-amber-700 dark:text-amber-400 border-none bg-transparent cursor-pointer">{language === 'ar' ? 'تحديث' : 'Refresh'}</button>
+            </div>
+          )}
+
+          {/* Location Permission Denied Warning */}
+          {isGpsDenied && (
+            <div className="m-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 p-4 rounded-2xl flex items-start gap-3 shadow-xs">
+              <span className="w-8 h-8 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold shrink-0 mt-0.5">📍</span>
+              <div className="flex-1 leading-relaxed">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  {language === 'ar' 
+                    ? 'صلاحية تحديد الموقع (GPS) غير مفعلة' 
+                    : 'Location Permission (GPS) is disabled'}
+                </p>
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                  {language === 'ar'
+                    ? 'يرجى السماح للتطبيق بالوصول لموقعك الجغرافي لتسجيل حضورك وبدء العمل ميدانياً. انقر هنا لعرض دليل تفعيل الصلاحية.'
+                    : 'Please allow the app to access your location to document task work and field attendance. Click here to view the setup guide.'}
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setPermissionGuideType('gps');
+                  setIsPermissionGuideOpen(true);
+                }} 
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 border-none bg-transparent cursor-pointer underline shrink-0 mt-0.5"
+              >
+                {language === 'ar' ? 'عرض الدليل' : 'Show Guide'}
+              </button>
+            </div>
+          )}
+
+          {/* Insecure Context Warning */}
+          {!Capacitor.isNativePlatform() && !window.isSecureContext && (
+            <div className="m-4 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 p-4 rounded-2xl flex items-start gap-3 shadow-xs animate-pulse">
+              <span className="w-8 h-8 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center text-red-600 dark:text-red-400 font-bold shrink-0 mt-0.5">⚠️</span>
+              <div className="flex-1 leading-relaxed">
+                <p className="text-xs font-semibold text-red-800 dark:text-red-300">
+                  {language === 'ar' 
+                    ? 'اتصال غير آمن (HTTP) - ميزات الـ GPS والإشعارات معطلة من قبل المتصفح' 
+                    : 'Insecure Connection (HTTP) - GPS & Notifications disabled by Browser'}
+                </p>
+                <p className="text-[11px] text-red-600 dark:text-red-400 mt-1">
+                  {language === 'ar'
+                    ? 'تمنع المتصفحات الوصول للموقع الجغرافي والإشعارات عبر روابط الـ HTTP العادية (مثل عناوين الـ IP المحلية). لتشغيلها، يرجى استخدام بروتوكول HTTPS أو localhost أو تجربة تطبيق الهاتف مباشرة عبر ملف الـ APK.'
+                    : 'Browsers block GPS and Notification access on insecure HTTP origins (like local network IP addresses). To test these features, please use a secure HTTPS link, run on localhost, or install the native Android APK.'}
+                </p>
+              </div>
             </div>
           )}
 
