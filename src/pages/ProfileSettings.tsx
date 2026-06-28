@@ -13,12 +13,44 @@ import { useTheme } from '../contexts/ThemeContext';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
-  const { user, profile, refreshRole, company } = useAuth();
+  const { user, profile, refreshRole, company, signOut } = useAuth();
   const { logActivity } = useActivityLog();
   const { t, language, changeLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { isSupported: isBiometricSupported, isEnabled: isBiometricEnabled, registerBiometric, disableBiometric } = useBiometricAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete account states
+  const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [isDeletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    const expectedText = language === 'ar' ? 'حذف الحساب' : 'DELETE ACCOUNT';
+    if (confirmText !== expectedText) {
+      toast.error(language === 'ar' ? 'يرجى كتابة نص التأكيد بشكل صحيح' : 'Please type the confirmation text correctly');
+      return;
+    }
+
+    setDeletingAccount(true);
+    try {
+      const { error } = await supabase.rpc('delete_own_user');
+      if (error) throw error;
+      
+      triggerHaptic('success');
+      toast.success(language === 'ar' ? 'تم حذف حسابك بنجاح' : 'Your account has been deleted successfully');
+      
+      await signOut();
+      navigate('/');
+    } catch (err: any) {
+      triggerHaptic('error');
+      console.error('[Delete Own User Error]:', err);
+      toast.error(err.message || (language === 'ar' ? 'حدث خطأ أثناء حذف الحساب' : 'Failed to delete account'));
+    } finally {
+      setDeletingAccount(false);
+      setDeleteModalOpen(false);
+    }
+  };
 
   const handleToggleBiometrics = async () => {
     if (isBiometricEnabled) {
@@ -791,7 +823,87 @@ export default function ProfileSettings() {
           </div>
         )}
 
+        {/* Delete Account Section */}
+        <div className="bg-red-50 dark:bg-rose-950/20 p-6 rounded-2xl border border-red-100 dark:border-rose-900/30 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-red-200/50 dark:border-rose-900/30">
+            <span className="w-8 h-8 bg-red-100 dark:bg-rose-900/50 text-red-600 dark:text-rose-400 rounded-full flex items-center justify-center text-sm font-bold">⚠️</span>
+            <div>
+              <h3 className="font-bold text-red-800 dark:text-rose-400 text-sm md:text-base">
+                {language === 'ar' ? 'منطقة الخطر: حذف الحساب' : 'Danger Zone: Delete Account'}
+              </h3>
+              <p className="text-xs text-red-600 dark:text-rose-500">
+                {language === 'ar' 
+                  ? 'بمجرد حذف حسابك، سيتم مسح كافة البيانات بشكل نهائي ولا يمكن استعادتها.' 
+                  : 'Once deleted, all your data will be permanently erased and cannot be recovered.'}
+              </p>
+            </div>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setDeleteModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white border-none py-3 px-6 rounded-xl text-sm font-bold transition-colors cursor-pointer shadow-sm w-full sm:w-auto"
+            >
+              {language === 'ar' ? 'حذف الحساب نهائياً' : 'Permanently Delete Account'}
+            </button>
+          </div>
+        </div>
+
       </div>
+
+      {/* Delete Account Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 space-y-4">
+              <div className="w-12 h-12 bg-red-100 dark:bg-rose-900/50 text-red-600 dark:text-rose-400 rounded-full flex items-center justify-center text-xl mx-auto">
+                ⚠️
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {language === 'ar' ? 'هل أنت متأكد تماماً؟' : 'Are you absolutely sure?'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {language === 'ar'
+                    ? 'سيؤدي هذا الإجراء إلى حذف جميع سجلات الدخول والزيارات والبيانات المنسوبة إليك نهائياً من النظام.'
+                    : 'This action will permanently purge all your logins, visits, and data from the system.'}
+                </p>
+                <p className="text-xs font-bold text-red-600 dark:text-rose-400 bg-red-50 dark:bg-rose-950/20 p-2.5 rounded-lg border border-red-100 dark:border-rose-950/30">
+                  {language === 'ar'
+                    ? `لتأكيد الحذف، يرجى كتابة "حذف الحساب" في الحقل أدناه:`
+                    : `To confirm, please type "DELETE ACCOUNT" in the field below:`}
+                </p>
+              </div>
+
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={language === 'ar' ? 'اكتب عبارة التأكيد هنا' : 'Type confirmation text here'}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 focus:border-red-600 focus:outline-hidden text-sm text-center bg-slate-50 dark:bg-slate-950 font-bold"
+              />
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setDeleteModalOpen(false); setConfirmText(''); }}
+                  className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold border-none cursor-pointer transition-colors"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={confirmText !== (language === 'ar' ? 'حذف الحساب' : 'DELETE ACCOUNT') || isDeletingAccount}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-xl text-sm font-semibold border-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-md shadow-red-200 dark:shadow-none"
+                >
+                  {isDeletingAccount ? (language === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (language === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

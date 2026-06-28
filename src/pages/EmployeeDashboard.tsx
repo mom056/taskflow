@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, statusLabels, statusColors, TaskStatus } from '../types';
-import { LogOut, MapPin, CheckCircle, RefreshCcw, Hand, Camera, X, ImageIcon, ClipboardList, CheckSquare, PlusCircle, Cloud, CloudOff, Zap, TrendingUp } from 'lucide-react';
+import { LogOut, MapPin, CheckCircle, RefreshCcw, Hand, Camera, X, ImageIcon, ClipboardList, CheckSquare, PlusCircle, Cloud, CloudOff, Zap, TrendingUp, Info } from 'lucide-react';
 import { useOfflineQueue, QueueItem } from '../hooks/useOfflineQueue';
 import toast from 'react-hot-toast';
 import { useTasks } from '../hooks/useTasks';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGeoLocation } from '../hooks/useGeoLocation';
+import { useGeoLocation, LocationCoords } from '../hooks/useGeoLocation';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Capacitor } from '@capacitor/core';
 import { openExternalUrl, takeNativePhoto, triggerHaptic } from '../lib/nativeServices';
@@ -20,6 +20,22 @@ import PullToRefresh from '../components/PullToRefresh';
 import NotificationCenter from '../components/NotificationCenter';
 import AppLogo from '../components/AppLogo';
 import AppLoader from '../components/AppLoader';
+import PermissionGuideModal from '../components/PermissionGuideModal';
+
+// Helper function to calculate distance using the Haversine formula
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
 
 export default function EmployeeDashboard() {
   const { signOut, user, profile, company } = useAuth();
@@ -40,6 +56,55 @@ export default function EmployeeDashboard() {
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isLogoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  // Phase 4 States
+  const [userCoords, setUserCoords] = useState<LocationCoords | null>(null);
+  const [sortByProximity, setSortByProximity] = useState(false);
+  const [isPermissionGuideOpen, setIsPermissionGuideOpen] = useState(false);
+  const [permissionGuideType, setPermissionGuideType] = useState<'gps' | 'push'>('gps');
+  const [updateInfo, setUpdateInfo] = useState<{ hasUpdate: boolean; latestTag: string; downloadUrl: string } | null>(null);
+
+  // Swipe gesture states
+  const [touchStart, setTouchStart] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [swipeTranslate, setSwipeTranslate] = useState<{ id: string; x: number } | null>(null);
+
+  // Get current user location on mount and on refresh
+  useEffect(() => {
+    getCoordinates()
+      .then(coords => {
+        setUserCoords(coords);
+      })
+      .catch(err => {
+        console.log('[GPS] Initial coordinates fetch failed or denied:', err);
+      });
+  }, [getCoordinates]);
+
+  // Check for in-app updates on startup
+  useEffect(() => {
+    const checkUpdates = async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/mom056/taskflow/releases/latest');
+        if (!res.ok) return;
+        const data = await res.json();
+        const latestTag = data.tag_name; // e.g., "v1.4.0"
+        const localVersion = 'v1.3.0'; // current build version
+
+        if (latestTag && latestTag !== localVersion) {
+          setUpdateInfo({
+            hasUpdate: true,
+            latestTag,
+            downloadUrl: `https://github.com/mom056/taskflow/releases/latest/download/app-release.apk`
+          });
+        }
+      } catch (err) {
+        console.warn('[Update Checker] Failed to fetch latest release details:', err);
+      }
+    };
+
+    if (isOnline) {
+      checkUpdates();
+    }
+  }, [isOnline]);
 
   // Auto-request push notification permissions on first native mobile app open
   useEffect(() => {
@@ -203,6 +268,7 @@ export default function EmployeeDashboard() {
         latitude = coords.latitude;
         longitude = coords.longitude;
         locationVerifiedAt = Date.now();
+        setUserCoords(coords); // Update coordinates state
         toast.success(isStart 
           ? (language === 'ar' ? 'تم توثيق موقع بدء العمل بنجاح ✓' : 'Start location verified ✓') 
           : (language === 'ar' ? 'تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓' : 'GPS location captured successfully ✓'), 
@@ -219,6 +285,8 @@ export default function EmployeeDashboard() {
         }
       } catch (err: any) {
         triggerHaptic('error');
+        setPermissionGuideType('gps');
+        setIsPermissionGuideOpen(true);
         toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.' : 'GPS failure. Access permission is required to update task status.'), { id: toastId });
         return; // Block status change if GPS coordinate capture fails
       }
@@ -404,6 +472,115 @@ export default function EmployeeDashboard() {
   const completedTasks = allMergedTasks.filter(t => t.status === 'completed');
   const displayTasks = activeTab === 'active' ? activeTasks : completedTasks;
 
+  // Chronologically ordered workday tasks for the workday path
+  const workdayTasks = useMemo(() => {
+    return [...allMergedTasks].sort((a, b) => {
+      const dueA = a.dueDate || 0;
+      const dueB = b.dueDate || 0;
+      if (dueA !== dueB) return dueA - dueB;
+      return a.createdAt - b.createdAt;
+    });
+  }, [allMergedTasks]);
+
+  // Sort and process tasks by proximity if toggled
+  const processedTasks = useMemo(() => {
+    let list = [...displayTasks];
+    if (activeTab === 'active' && sortByProximity && userCoords) {
+      list.sort((a, b) => {
+        const hasA = a.latitude !== undefined && a.latitude !== null && a.longitude !== undefined && a.longitude !== null;
+        const hasB = b.latitude !== undefined && b.latitude !== null && b.longitude !== undefined && b.longitude !== null;
+        
+        if (!hasA && !hasB) return 0;
+        if (!hasA) return 1;
+        if (!hasB) return -1;
+        
+        const distA = calculateDistance(userCoords.latitude, userCoords.longitude, a.latitude!, a.longitude!);
+        const distB = calculateDistance(userCoords.latitude, userCoords.longitude, b.latitude!, b.longitude!);
+        return distA - distB;
+      });
+    }
+    return list;
+  }, [displayTasks, activeTab, sortByProximity, userCoords]);
+
+  const getTaskDistance = (task: Task) => {
+    if (!userCoords || !task.latitude || !task.longitude) return null;
+    return calculateDistance(userCoords.latitude, userCoords.longitude, task.latitude, task.longitude);
+  };
+
+  const formatDistance = (dist: number) => {
+    if (dist < 1) {
+      const meters = Math.round(dist * 1000);
+      return language === 'ar' ? `على بعد ${meters} متر` : `${meters}m away`;
+    }
+    return language === 'ar' ? `تبعد ${dist.toFixed(1)} كم` : `${dist.toFixed(1)}km away`;
+  };
+
+  const handleNodeClick = (taskId: string) => {
+    const element = document.getElementById(`task-card-${taskId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('ring-4', 'ring-blue-500', 'ring-offset-2', 'dark:ring-offset-slate-900');
+      triggerHaptic('light');
+      setTimeout(() => {
+        element.classList.remove('ring-4', 'ring-blue-500', 'ring-offset-2', 'dark:ring-offset-slate-900');
+      }, 2000);
+    }
+  };
+
+  // Swipe Gestures Handlers
+  const handleTouchStart = (e: React.TouchEvent, taskId: string) => {
+    if (!Capacitor.isNativePlatform() && window.innerWidth >= 768) return; // Only on mobile viewport or native
+    const touch = e.touches[0];
+    setTouchStart({ id: taskId, x: touch.clientX, y: touch.clientY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent, taskId: string) => {
+    if (!touchStart || touchStart.id !== taskId) return;
+    const touch = e.touches[0];
+    const diffX = touch.clientX - touchStart.x;
+    const diffY = touch.clientY - touchStart.y;
+    
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      // limit swipe translation
+      const limitedX = Math.max(-120, Math.min(120, diffX));
+      setSwipeTranslate({ id: taskId, x: limitedX });
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, task: Task) => {
+    if (!touchStart || touchStart.id !== task.id || !swipeTranslate || swipeTranslate.id !== task.id) {
+      setTouchStart(null);
+      setSwipeTranslate(null);
+      return;
+    }
+    
+    const diffX = swipeTranslate.x;
+    
+    if (diffX > 80) {
+      // Swipe Right -> Start task
+      if (task.status === 'new' || task.status === 'pending') {
+        triggerHaptic('light');
+        handleUpdateStatus(task.id, 'in_progress');
+      }
+    } else if (diffX < -80) {
+      // Swipe Left -> Open Camera/Notes modal
+      if (task.status === 'in_progress') {
+        triggerHaptic('light');
+        openNotesModal(task);
+      }
+    }
+    
+    setTouchStart(null);
+    setSwipeTranslate(null);
+  };
+
+  const getCardStyle = (taskId: string) => {
+    if (swipeTranslate && swipeTranslate.id === taskId) {
+      return { transform: `translateX(${swipeTranslate.x}px)`, transition: 'none' };
+    }
+    return { transform: 'translateX(0px)', transition: 'transform 0.2s ease' };
+  };
+
   const avatar = (profile?.name || user?.email || 'م')[0].toUpperCase();
 
   return (
@@ -524,7 +701,7 @@ export default function EmployeeDashboard() {
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
           {isLoading && (
             <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
               <AppLoader size={44} />
@@ -532,67 +709,56 @@ export default function EmployeeDashboard() {
           )}
 
           {isError && (
-            <div className="m-4 bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
-              <span className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 font-bold shrink-0">!</span>
+            <div className="m-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 p-4 rounded-2xl flex items-center gap-3">
+              <span className="w-8 h-8 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold shrink-0">!</span>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-800">{language === 'ar' ? 'تعذر جلب المهام' : 'Could not fetch tasks'}</p>
-                <p className="text-xs text-amber-600 mt-0.5">{language === 'ar' ? 'تأكد من الاتصال بالإنترنت' : 'Check your internet connection'}</p>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">{language === 'ar' ? 'تعذر جلب المهام' : 'Could not fetch tasks'}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{language === 'ar' ? 'تأكد من الاتصال بالإنترنت' : 'Check your internet connection'}</p>
               </div>
-              <button onClick={() => window.location.reload()} className="text-xs font-semibold text-amber-700 border-none bg-transparent cursor-pointer">{language === 'ar' ? 'تحديث' : 'Refresh'}</button>
+              <button onClick={() => window.location.reload()} className="text-xs font-semibold text-amber-700 dark:text-amber-400 border-none bg-transparent cursor-pointer">{language === 'ar' ? 'تحديث' : 'Refresh'}</button>
             </div>
           )}
 
           <PullToRefresh onRefresh={handleRefresh}>
             <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-6">
 
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-                  <ClipboardList className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-slate-900">{stats.total}</div>
-                  <div className="text-[10px] text-slate-400 font-semibold">{t.dashboard.totalTasks}</div>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-                  <Zap className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-slate-900">{stats.inProgress}</div>
-                  <div className="text-[10px] text-slate-400 font-semibold">{t.dashboard.inProgress}</div>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center shrink-0">
-                  <CheckSquare className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-slate-900">{stats.completedThisWeek}</div>
-                  <div className="text-[10px] text-slate-400 font-semibold">{t.dashboard.completedThisWeek}</div>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-slate-900">{stats.completionRate}%</div>
-                  <div className="text-[10px] text-slate-400 font-semibold">{t.dashboard.completionRate}</div>
-                </div>
+            {/* Segmented Control Bar for active / completed filters inside content */}
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
+              <div className="flex border border-slate-200 dark:border-slate-700/60 rounded-xl p-1 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto shrink-0 select-none w-full sm:w-auto">
+                {([
+                  { id: 'active', label: language === 'ar' ? 'مهام نشطة' : 'Active Tasks', count: activeTasks.length },
+                  { id: 'completed', label: language === 'ar' ? 'مهام منجزة' : 'Completed Tasks', count: completedTasks.length },
+                ] as const).map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                      activeTab === item.id
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-transparent'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                      activeTab === item.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200/60 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}>
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Notification Banner */}
             {!isSubscribed && permission !== 'granted' && isOnline && (
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">📢</span>
+                  <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">📢</span>
                   <div>
-                    <h4 className="text-sm font-semibold text-blue-800">{language === 'ar' ? 'تفعيل إشعارات المهام المباشرة' : 'Enable Live Push Notifications'}</h4>
-                    <p className="text-xs text-blue-600 mt-0.5">
+                    <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">{language === 'ar' ? 'تفعيل إشعارات المهام المباشرة' : 'Enable Live Push Notifications'}</h4>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
                       {language === 'ar' 
                         ? 'تلقى تنبيهات فورية على هاتفك بمجرد تكليفك بمهام أو زيارات جديدة من المدير.'
                         : 'Get instant notification on your device when a manager assigns you new tasks or visits.'}
@@ -605,6 +771,8 @@ export default function EmployeeDashboard() {
                       await subscribeUser();
                       toast.success(language === 'ar' ? 'تم تفعيل الإشعارات بنجاح!' : 'Notifications enabled successfully!');
                     } catch (err: any) {
+                      setPermissionGuideType('push');
+                      setIsPermissionGuideOpen(true);
                       toast.error(err.message || (language === 'ar' ? 'فشل تفعيل الإشعارات' : 'Could not enable notifications'));
                     }
                   }}
@@ -624,85 +792,197 @@ export default function EmployeeDashboard() {
               </button>
             </div>
 
-            {displayTasks.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {displayTasks.map(task => (
-                  <div key={task.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-                    <div className="p-5 flex-1">
-                      <div className="flex justify-between items-start mb-2 gap-2">
-                        <h3 className="font-bold text-slate-900 text-base leading-snug">{task.title}</h3>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {(task as any).isOfflinePending && (
-                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-0.5" title={language === 'ar' ? 'قيد المزامنة عند الاتصال' : 'Syncing when online'}>
-                              <RefreshCcw className="w-2.5 h-2.5 animate-spin" />
-                              {language === 'ar' ? 'قيد المزامنة' : 'Syncing'}
-                            </span>
-                          )}
-                          <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${statusColors[task.status]}`}>
-                            {getStatusLabel(task.status)}
-                          </span>
+            {/* Interactive Workday Path */}
+            {activeTab === 'active' && workdayTasks.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  {language === 'ar' ? 'خط مسار اليوم التفاعلي' : 'Interactive Workday Path'}
+                </h3>
+                <div className="relative flex items-center justify-between py-2 overflow-x-auto gap-4 scrollbar-none workday-path-line">
+                  {workdayTasks.map((task, idx) => {
+                    const isCompleted = task.status === 'completed';
+                    const isCurrent = task.status === 'in_progress';
+                    
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => handleNodeClick(task.id)}
+                        className="relative flex flex-col items-center gap-1.5 min-w-[70px] border-none bg-transparent cursor-pointer group focus:outline-none z-10"
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                          isCompleted 
+                            ? 'bg-green-500 text-white shadow-xs' 
+                            : isCurrent 
+                              ? 'bg-amber-500 text-white shadow-xs scale-110 ring-4 ring-amber-100 dark:ring-amber-900/50' 
+                              : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200'
+                        }`}>
+                          {isCompleted ? '✓' : idx + 1}
                         </div>
-                      </div>
-                      {task.description && <p className="text-slate-500 text-sm mb-3 leading-relaxed">{task.description}</p>}
-                      <div className="space-y-2">
-                        {task.location && (
-                          <div className="flex items-center text-xs text-slate-400">
-                            <MapPin className={`w-3.5 h-3.5 shrink-0 text-blue-400 ${language === 'ar' ? 'ml-1.5' : 'mr-1.5'}`} />
-                            <span className="truncate">{task.location}</span>
-                          </div>
-                        )}
-                        {task.notes && (
-                          <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 border border-slate-100">
-                            <span className="font-semibold block mb-1">{language === 'ar' ? 'ملاحظاتي:' : 'My Notes:'}</span>{task.notes}
-                          </div>
-                        )}
-                        {task.imageUrl && (
-                          <a href={task.imageUrl}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              openExternalUrl(task.imageUrl!);
-                            }}
-                            className="block overflow-hidden rounded-xl border border-slate-100 mt-2">
-                            <img src={task.imageUrl} alt="attachment" className="w-full h-32 object-cover hover:scale-105 transition-transform duration-300" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[80px] text-center">
+                          {task.title}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                    {activeTab === 'active' && (
-                      <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">{language === 'ar' ? 'تغيير الحالة' : 'Change Status'}</p>
-                        <div className={`flex gap-2 flex-wrap ${language === 'en' ? 'flex-row' : ''}`}>
-                          {(task.status === 'new' || task.status === 'pending') && (
-                            <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-all cursor-pointer">
-                              <RefreshCcw className="w-3.5 h-3.5" />{language === 'ar' ? 'بدء العمل' : 'Start Task'}
-                            </button>
+            {/* Active Task sorting toggle */}
+            {activeTab === 'active' && activeTasks.length > 0 && userCoords && (
+              <div className="flex justify-between items-center bg-white dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {language === 'ar' ? 'فرز المهام النشطة:' : 'Sort Active Tasks:'}
+                </span>
+                <button
+                  onClick={() => setSortByProximity(!sortByProximity)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                    sortByProximity 
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  {language === 'ar' ? '🔍 حسب الأقرب إليّ' : '🔍 Sort by Nearest'}
+                </button>
+              </div>
+            )}
+
+            {processedTasks.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {processedTasks.map(task => {
+                  const dist = getTaskDistance(task);
+                  const isInsideGeofence = dist !== null && dist < 0.1; // < 100 meters
+                  const isSwipePending = swipeTranslate && swipeTranslate.id === task.id;
+                  
+                  return (
+                    <div 
+                      key={task.id} 
+                      id={`task-card-${task.id}`}
+                      onTouchStart={(e) => handleTouchStart(e, task.id)}
+                      onTouchMove={(e) => handleTouchMove(e, task.id)}
+                      onTouchEnd={(e) => handleTouchEnd(e, task)}
+                      style={getCardStyle(task.id)}
+                      className={`bg-white dark:bg-slate-800 rounded-2xl border ${
+                        isInsideGeofence && task.status !== 'completed'
+                          ? 'border-green-500 dark:border-green-400 geofence-glow'
+                          : 'border-slate-100 dark:border-slate-700/60'
+                      } shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow relative select-none status-edge-${task.status}`}
+                    >
+                      {/* Swipe Actions Background visual indicators for mobile */}
+                      {isSwipePending && (
+                        <div className="absolute inset-0 -z-10 flex items-center justify-between px-4 text-xs font-bold text-white bg-slate-100 dark:bg-slate-700/30">
+                          <span className="text-amber-600 dark:text-amber-400">➔ {language === 'ar' ? 'بدء المهمة' : 'Start Task'}</span>
+                          <span className="text-blue-600 dark:text-blue-400">{language === 'ar' ? 'صورة وملاحظة' : 'Photo & Note'} ➔</span>
+                        </div>
+                      )}
+
+                      <div className="p-5 flex-1">
+                        <div className="flex justify-between items-start mb-2 gap-2">
+                          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base leading-snug">{task.title}</h3>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(task as any).isOfflinePending && (
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-full flex items-center gap-0.5" title={language === 'ar' ? 'قيد المزامنة عند الاتصال' : 'Syncing when online'}>
+                                <RefreshCcw className="w-2.5 h-2.5 animate-spin" />
+                                {language === 'ar' ? 'قيد المزامنة' : 'Syncing'}
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${statusColors[task.status]}`}>
+                              {getStatusLabel(task.status)}
+                            </span>
+                          </div>
+                        </div>
+                        {task.description && <p className="text-slate-500 dark:text-slate-400 text-sm mb-3 leading-relaxed">{task.description}</p>}
+                        <div className="space-y-2">
+                          {task.location && (
+                            <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+                              <div className="flex items-center">
+                                <MapPin className={`w-3.5 h-3.5 shrink-0 text-blue-400 ${language === 'ar' ? 'ml-1.5' : 'mr-1.5'}`} />
+                                <span className="truncate max-w-[200px]">{task.location}</span>
+                              </div>
+                              {dist !== null && (
+                                <span className="font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+                                  {formatDistance(dist)}
+                                </span>
+                              )}
+                            </div>
                           )}
-                          {task.status === 'in_progress' && (
-                            <>
-                              <button onClick={() => handleUpdateStatus(task.id, 'completed')}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-all cursor-pointer">
-                                <CheckCircle className="w-3.5 h-3.5" />{language === 'ar' ? 'اكتمل' : 'Complete'}
-                              </button>
-                              <button onClick={() => handleUpdateStatus(task.id, 'pending')}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-all cursor-pointer">
-                                <Hand className="w-3.5 h-3.5" />{language === 'ar' ? 'تعليق' : 'Suspend'}
-                              </button>
-                            </>
+                          {task.notes && (
+                            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-700/60">
+                              <span className="font-semibold block mb-1">{language === 'ar' ? 'ملاحظاتي:' : 'My Notes:'}</span>{task.notes}
+                            </div>
                           )}
-                          <button onClick={() => openNotesModal(task)}
-                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer ${language === 'ar' ? 'ml-auto' : 'mr-auto'}`}>
-                            <Camera className="w-3.5 h-3.5" />{language === 'ar' ? 'صورة / ملاحظة' : 'Photo / Note'}
-                          </button>
+                          {task.imageUrl && (
+                            <a href={task.imageUrl}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openExternalUrl(task.imageUrl!);
+                              }}
+                              className="block overflow-hidden rounded-xl border border-slate-100 dark:border-slate-700/50 mt-2">
+                              <img src={task.imageUrl} alt="attachment" className="w-full h-32 object-cover hover:scale-105 transition-transform duration-300" />
+                            </a>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {activeTab === 'active' && (
+                        <div className="p-4 bg-slate-50/50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-700/60 space-y-3">
+                          
+                          {/* Geofence Check-in Button */}
+                          {isInsideGeofence && (
+                            <div className="pb-1 border-b border-dashed border-slate-200 dark:border-slate-700/40">
+                              {task.status === 'in_progress' ? (
+                                <button 
+                                  onClick={() => handleUpdateStatus(task.id, 'completed')}
+                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none"
+                                >
+                                  <CheckCircle className="w-4 h-4 animate-bounce" />
+                                  <span>{language === 'ar' ? 'لقد وصلت للموقع! تسجيل خروج وإتمام المهمة' : 'Arrived at site! Complete task'}</span>
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => handleUpdateStatus(task.id, 'in_progress')}
+                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none"
+                                >
+                                  <MapPin className="w-4 h-4 animate-bounce" />
+                                  <span>{language === 'ar' ? 'لقد وصلت للموقع! بدء العمل' : 'Arrived at location! Start task'}</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide m-0">{language === 'ar' ? 'تغيير الحالة' : 'Change Status'}</p>
+                          <div className={`flex gap-2 flex-wrap ${language === 'en' ? 'flex-row' : ''}`}>
+                            {(task.status === 'new' || task.status === 'pending') && (
+                              <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all cursor-pointer">
+                                <RefreshCcw className="w-3.5 h-3.5" />{language === 'ar' ? 'بدء العمل' : 'Start Task'}
+                              </button>
+                            )}
+                            {task.status === 'in_progress' && (
+                              <>
+                                <button onClick={() => handleUpdateStatus(task.id, 'completed')}
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all cursor-pointer">
+                                  <CheckCircle className="w-3.5 h-3.5" />{language === 'ar' ? 'اكتمل' : 'Complete'}
+                                </button>
+                                <button onClick={() => handleUpdateStatus(task.id, 'pending')}
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all cursor-pointer">
+                                  <Hand className="w-3.5 h-3.5" />{language === 'ar' ? 'تعليق' : 'Suspend'}
+                                </button>
+                              </>
+                            )}
+                            <button onClick={() => openNotesModal(task)}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer border-none ${language === 'ar' ? 'ml-auto' : 'mr-auto'}`}>
+                              <Camera className="w-3.5 h-3.5" />{language === 'ar' ? 'صورة / ملاحظة' : 'Photo / Note'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 shadow-xs">
+              <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
                 {activeTab === 'active'
                   ? <><ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-400 text-sm">{language === 'ar' ? 'لا توجد مهام نشطة — أضف مهمتك الأولى' : 'No active tasks found'}</p></>
                   : <><CheckSquare className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-400 text-sm">{language === 'ar' ? 'لا توجد مهام منجزة بعد' : 'No completed tasks yet'}</p></>
@@ -898,6 +1178,47 @@ export default function EmployeeDashboard() {
                 {t.common.cancel}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PERMISSION GUIDE MODAL ── */}
+      <PermissionGuideModal
+        isOpen={isPermissionGuideOpen}
+        onClose={() => setIsPermissionGuideOpen(false)}
+        type={permissionGuideType}
+        language={language}
+      />
+
+      {/* ── IN-APP UPDATE CHECKER ALERT MODAL ── */}
+      {updateInfo?.hasUpdate && (
+        <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm bg-white dark:bg-slate-800 border border-blue-100 dark:border-slate-700 p-4 rounded-2xl shadow-xl z-40 flex flex-col gap-3 animate-slide-up">
+          <div className="flex items-start gap-3">
+            <span className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0">✨</span>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                {language === 'ar' ? 'يتوفر إصدار جديد!' : 'New Version Available!'}
+              </h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                {language === 'ar' 
+                  ? `يتوفر إصدار جديد من التطبيق (${updateInfo.latestTag}). قم بالتحديث الآن للاستفادة من أحدث التحسينات.` 
+                  : `A new version of the app is available (${updateInfo.latestTag}). Update now to get the latest improvements.`}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button 
+              onClick={() => openExternalUrl(updateInfo.downloadUrl)}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold border-none cursor-pointer"
+            >
+              {language === 'ar' ? 'تحديث الآن' : 'Update Now'}
+            </button>
+            <button 
+              onClick={() => setUpdateInfo(null)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold border-none cursor-pointer"
+            >
+              {language === 'ar' ? 'لاحقاً' : 'Later'}
+            </button>
           </div>
         </div>
       )}

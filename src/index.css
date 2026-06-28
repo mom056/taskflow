@@ -166,3 +166,81 @@ body {
   animation: logo-ripple 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   animation-delay: 1s;
 }
+
+/* --- Signature UI Brand Design Styles --- */
+
+:root {
+  --brand-blue: #2563eb;
+  --brand-cyan: #06b6d4;
+  --brand-green: #10b981;
+}
+
+/* Geofence pulse animation */
+@keyframes pulse-geofence {
+  0%, 100% {
+    box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-color: rgba(16, 185, 129, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 15px 4px rgba(16, 185, 129, 0.7), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-color: rgba(16, 185, 129, 1);
+  }
+}
+
+.geofence-glow {
+  animation: pulse-geofence 2s infinite;
+}
+
+/* Status border highlights (Signature UI) - LTR defaults to left, RTL overridden below */
+.status-edge-new {
+  border-left: 4px solid #3b82f6 !important;
+}
+.status-edge-in_progress {
+  border-left: 4px solid #f59e0b !important;
+}
+.status-edge-completed {
+  border-left: 4px solid #10b981 !important;
+}
+.status-edge-pending {
+  border-left: 4px solid #ef4444 !important;
+}
+
+/* RTL overrides: swap left border to right border */
+[dir="rtl"] .status-edge-new {
+  border-left: none !important;
+  border-right: 4px solid #3b82f6 !important;
+}
+[dir="rtl"] .status-edge-in_progress {
+  border-left: none !important;
+  border-right: 4px solid #f59e0b !important;
+}
+[dir="rtl"] .status-edge-completed {
+  border-left: none !important;
+  border-right: 4px solid #10b981 !important;
+}
+[dir="rtl"] .status-edge-pending {
+  border-left: none !important;
+  border-right: 4px solid #ef4444 !important;
+}
+
+/* Workday timeline styling */
+.workday-path-line {
+  position: relative;
+}
+.workday-path-line::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-image: linear-gradient(to right, #cbd5e1 50%, rgba(255, 255, 255, 0) 0%);
+  background-position: bottom;
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  transform: translateY(-50%);
+  z-index: 0;
+}
+.dark .workday-path-line::before {
+  background-image: linear-gradient(to right, #475569 50%, rgba(0, 0, 0, 0) 0%);
+}

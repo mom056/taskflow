@@ -15,9 +15,10 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Real-time employee status badge (🟢 Busy on a task / ⚪ Available) computed dynamically using tasks memo.
   * Employee modification/deletion dialogs linked to `create-user` Edge Function.
 * **Employee Dashboard (`src/pages/EmployeeDashboard.tsx`):**
-  * Simple task list for field employees.
-  * Location recording at the start and completion of each task.
-  * Sequenced task action buttons.
+  * Renders the interactive **Visual Workday Path** at the top of active tasks.
+  * Uses a dynamic inline **Segmented Control Bar** to switch between active and completed tasks with live counters (instead of the old 4 bulky KPI grid cards).
+  * Proximity-based sorting ("الأقرب إليّ") to order tasks based on Haversine distance from the user's GPS coordinates.
+  * Geofence arrival detection (pulsing glow + check-in triggers) and swipe gestures to start/complete tasks.
 * **Native Services (`src/lib/nativeServices.ts`):**
   * Core integration for Capacitor plugins (Geolocation, Browser, etc.).
   * Resilient multi-tier geolocation tracking.
@@ -48,10 +49,10 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Phase 1: Security & Critical Basics:** Implemented Forgot Password flow (`ResetPassword.tsx` page and reset email trigger), database-level employee limits check trigger, verification of native push notification deployment, and confirmation dialogs for sign-out and company deactivations.
 * **Phase 2: UX & Interactivity:** Integrated KPI metrics cards for employee performance, date range filter for manager dashboards, and company settings with logo upload and storage buckets.
 * **Phase 3: Data Integrity & Offline:** Integrated offline React Query local persistence with custom Capacitor Preferences adapter and introduced audit activity logger (`useActivityLog`).
-* **Phase 4: Production Hardening:** Resolved company types mismatch, fixed React Modal nesting bugs in Employee/Manager dashboards, and enabled PWA Service Worker.
-* **Phase 5: Future Growth & Multi-language (completed):** Verified Landing Page routing, implemented translation context with dynamic RTL/LTR layout switcher. Expanded with Phase 5.3-5.7 mobile additions: Notification Center drawer, Biometrics Auth (Passkeys + Preferences), custom scheme Deep Linking (`com.taskflow.app://`), Offline Map fallbacks, and native PDF/HTML export sharing sheets.
-* **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting inside `main.tsx` and unified `ErrorBoundary.tsx`. Integrated native `@capacitor/haptics` vibration feedback on task states, edits, updates, and application crash events.
-* **Build Verification:** Successfully verified TypeScript compilation (`npx tsc --noEmit`) and production build compilation (`npm run build`) with zero errors.
+* **Phase 4: Production Hardening & Dashboard Unification (completed):** Resolved company types mismatch, fixed React Modal nesting bugs in Employee/Manager dashboards, enabled PWA Service Worker. Refactored Manager Dashboard to route mobile and desktop views directly into a single responsive `TasksTable` component, and replaced the status filters dropdown with a premium bilingual Segmented Button Group controller.
+* **Phase 5: Future Growth, Multi-language & App Delivery (completed):** Verified Landing Page routing, implemented translation context with dynamic RTL/LTR layout switcher. Expanded with Notification Center, Biometrics Auth, Deep Linking, Offline Maps, and PDF Sharing sheets. Redesigned the Landing Page download section to offer Android APK installation steps, an interactive iOS Safari PWA guide, and an SVG-rendered QR Code. Implemented Apple-compliant "Delete Account" Danger Zone in Profile Settings with double-confirmation, invoking the `delete_own_user` DB RPC before sign-out.
+* **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting and `ErrorBoundary.tsx`. Integrated `@capacitor/haptics` tactile feedback.
+* **Build Verification:** Successfully compiled the entire client bundle with zero errors via `npx tsc --noEmit` and Vite production build (`npm run build`).
 
 ---
 
@@ -85,3 +86,13 @@ This file maintains the current structural and functional state of the TaskFlow 
   * This guarantees a 100% match with the approved premium logo design (combining glossy reflections, volumetric gradient accents, and precise shading).
   * Configurations updated in `index.html`, `vite.config.ts` (PWA assets), and `push-worker.js` (Web Push notification icons) to reference `/logo.png`.
   * Supports dynamic sizing properties (`size`) to fit responsive sidebars (30-32px) and login forms (56px) cleanly.
+
+---
+
+## 7. PostgreSQL Migration Notes & Manual Procedures
+
+* **Self-Deletion RPC Migration:**
+  * **File:** `supabase/migrations/20260628130000_delete_own_user_rpc.sql`
+  * **Description:** Implements the `delete_own_user()` database RPC function with `SECURITY DEFINER` privileges to allow authenticated users to initiate self-deletion of their accounts from `auth.users`, cascading cleanups to their profile and sessions while setting reference keys in task histories to NULL.
+  * **Deployment requirement:** Must be run in the Supabase SQL Editor or deployed using the Supabase CLI in the production dashboard prior to testing the Profile Settings "Delete Account" action.
+

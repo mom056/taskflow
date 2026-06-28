@@ -619,23 +619,15 @@ export default function ManagerDashboard() {
               </div>
 
               {/* Recent Tasks */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center">
-                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'آخر المهام' : 'Recent Tasks'}</h2>
-                  <button onClick={() => setActiveTab('tasks')} className="text-blue-600 text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-50 dark:border-slate-700/40 flex justify-between items-center">
+                  <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">{language === 'ar' ? 'آخر المهام' : 'Recent Tasks'}</h2>
+                  <button onClick={() => setActiveTab('tasks')} className="text-blue-600 dark:text-blue-400 text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
                     {language === 'ar' ? 'عرض الكل' : 'View All'} <ChevronLeft className={`w-3.5 h-3.5 ${language === 'en' ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
-
-                {/* Desktop table */}
-                <div className="hidden md:block">
+                <div className="p-4 md:p-0">
                   <TasksTable tasks={tasks.slice(0, 5)} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} onView={openTaskDetails} />
-                </div>
-
-                {/* Mobile cards */}
-                <div className="md:hidden p-4 space-y-3">
-                  {tasks.slice(0, 5).map(task => <MobileTaskCard key={task.id} task={task} />)}
-                  {tasks.length === 0 && <p className="text-center text-slate-400 text-sm py-6">{language === 'ar' ? 'لا توجد مهام مسجلة حالياً' : 'No tasks registered yet'}</p>}
                 </div>
               </div>
             </div>
@@ -645,33 +637,46 @@ export default function ManagerDashboard() {
           {activeTab === 'tasks' && (
             <div className="p-4 md:p-8 space-y-4 pb-24 md:pb-8">
               {/* Filter bar */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-xs p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
                 <div className="relative flex-1">
                   <input
                     type="text"
                     placeholder={language === 'ar' ? 'ابحث عن مهمة أو موظف...' : 'Search task or employee...'}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 focus:bg-white transition-colors"
+                    className="w-full pl-3 pr-10 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 dark:bg-slate-900/40 focus:bg-white transition-colors"
                   />
                   <Search className={`w-4 h-4 text-slate-400 absolute top-3 ${language === 'ar' ? 'right-3' : 'left-3'}`} />
                 </div>
-                <div className="grid grid-cols-2 sm:flex gap-3">
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value as TaskStatus | 'all')}
-                    className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
-                  >
-                    <option value="all">{language === 'ar' ? 'كل الحالات' : 'All Statuses'}</option>
-                    <option value="new">{language === 'ar' ? 'جديدة' : 'New'}</option>
-                    <option value="in_progress">{language === 'ar' ? 'جاري العمل' : 'In Progress'}</option>
-                    <option value="completed">{language === 'ar' ? 'مكتملة' : 'Completed'}</option>
-                    <option value="pending">{language === 'ar' ? 'معلقة' : 'Pending'}</option>
-                  </select>
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  {/* Status Segmented Controller */}
+                  <div className="flex border border-slate-200 dark:border-slate-700/60 rounded-xl p-1 bg-slate-50 dark:bg-slate-800/40 overflow-x-auto shrink-0 select-none">
+                    {([
+                      { id: 'all', label: language === 'ar' ? 'الكل' : 'All' },
+                      { id: 'new', label: language === 'ar' ? 'جديدة' : 'New' },
+                      { id: 'in_progress', label: language === 'ar' ? 'جاري العمل' : 'In Progress' },
+                      { id: 'completed', label: language === 'ar' ? 'مكتملة' : 'Completed' },
+                      { id: 'pending', label: language === 'ar' ? 'معلقة' : 'Pending' },
+                    ] as const).map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setStatusFilter(item.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer whitespace-nowrap ${
+                          statusFilter === item.id 
+                            ? 'bg-blue-600 text-white shadow-xs' 
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <select
                     value={employeeFilter}
                     onChange={e => setEmployeeFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                    className="border border-slate-200 dark:border-slate-700 rounded-xl text-sm px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 cursor-pointer"
                   >
                     <option value="all">{language === 'ar' ? 'كل الموظفين' : 'All Employees'}</option>
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -679,21 +684,21 @@ export default function ManagerDashboard() {
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <div className="flex gap-2 items-center">
-                    <span className="text-xs text-slate-500 font-semibold shrink-0">{language === 'ar' ? 'من:' : 'From:'}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold shrink-0">{language === 'ar' ? 'من:' : 'From:'}</span>
                     <input
                       type="date"
                       value={startDate}
                       onChange={e => setStartDate(e.target.value)}
-                      className="border border-slate-200 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                      className="border border-slate-200 dark:border-slate-700 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 cursor-pointer"
                     />
                   </div>
                   <div className="flex gap-2 items-center">
-                    <span className="text-xs text-slate-500 font-semibold shrink-0">{language === 'ar' ? 'إلى:' : 'To:'}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold shrink-0">{language === 'ar' ? 'إلى:' : 'To:'}</span>
                     <input
                       type="date"
                       value={endDate}
                       onChange={e => setEndDate(e.target.value)}
-                      className="border border-slate-200 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 cursor-pointer"
+                      className="border border-slate-200 dark:border-slate-700 rounded-xl text-xs px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 cursor-pointer"
                     />
                   </div>
                   {(startDate || endDate) && (
@@ -707,19 +712,8 @@ export default function ManagerDashboard() {
                 </div>
               </div>
 
-              {/* Desktop table */}
-              <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs overflow-hidden p-4 md:p-0">
                 <TasksTable tasks={filteredTasks} employees={employees} onEdit={openEditTask} onDelete={handleDeleteTask} onView={openTaskDetails} />
-              </div>
-
-              {/* Mobile cards */}
-              <div className="md:hidden space-y-3">
-                {filteredTasks.map(task => <MobileTaskCard key={task.id} task={task} />)}
-                {filteredTasks.length === 0 && (
-                  <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100 shadow-xs">
-                    {language === 'ar' ? 'لا توجد مهام مطابقة' : 'No matching tasks'}
-                  </div>
-                )}
               </div>
             </div>
           )}
