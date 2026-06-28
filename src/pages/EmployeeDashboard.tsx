@@ -99,7 +99,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v1.3.0'; // current build version
+        const localVersion = 'v1.3.1'; // current build version
 
         if (latestTag && latestTag !== localVersion) {
           setUpdateInfo({
