@@ -259,7 +259,7 @@ export default function LandingPage() {
 
                   <div className="pt-2">
                     <a
-                      href="https://github.com/mom056/taskflow/releases/latest"
+                      href="https://github.com/mom056/taskflow/releases/latest/download/app-release.apk"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold px-6 py-3.5 rounded-xl transition-all shadow-md shadow-blue-900/30 hover:-translate-y-0.5 text-decoration-none"
