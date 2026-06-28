@@ -68,16 +68,12 @@ export function usePushNotifications(userId?: string) {
       setIsChecking(true);
       try {
         if (Capacitor.isNativePlatform()) {
-          const { data, error } = await supabase
-            .from('push_subscriptions')
-            .select('id')
-            .eq('user_id', userId)
-            .not('device_token', 'is', null)
-            .limit(1);
-
-          if (error) throw error;
-          if (data && data.length > 0) {
+          const { PushNotifications } = await import('@capacitor/push-notifications');
+          const perm = await PushNotifications.checkPermissions();
+          if (perm.receive === 'granted') {
             setIsSubscribed(true);
+          } else {
+            setIsSubscribed(false);
           }
         } else {
           await checkSubscription();
@@ -91,6 +87,26 @@ export function usePushNotifications(userId?: string) {
 
     initCheck();
   }, [userId, checkSubscription]);
+
+  // Background registration once profile and permissions are ready
+  useEffect(() => {
+    if (!userId || !profile?.company_id || !Capacitor.isNativePlatform()) return;
+
+    const runBackgroundRegistration = async () => {
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const perm = await PushNotifications.checkPermissions();
+        if (perm.receive === 'granted') {
+          await registerNativePushToken(userId, profile.company_id);
+          setIsSubscribed(true);
+        }
+      } catch (err) {
+        console.warn('[PushNotifications] Background native push registration failed:', err);
+      }
+    };
+
+    runBackgroundRegistration();
+  }, [userId, profile?.company_id]);
 
   const subscribeUser = useCallback(async () => {
     if (!userId) return;
