@@ -76,22 +76,59 @@ export async function getNativeLocation(): Promise<{ latitude: number; longitude
       accuracyMeters: position.coords.accuracy ?? undefined
     };
   } else {
-    // Fallback to web browser Geolocation API
+    // Fallback to web browser Geolocation API with robust multi-attempt fallbacks
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('متصفحك أو جهازك لا يدعم تحديد الموقع الجغرافي (GPS)'));
         return;
       }
+
+      // Attempt 1: High Accuracy scan (works best with hardware GPS/clear sky)
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, approximate: false, accuracyMeters: pos.coords.accuracy ?? undefined }),
+        (pos) => resolve({ 
+          latitude: pos.coords.latitude, 
+          longitude: pos.coords.longitude, 
+          approximate: false, 
+          accuracyMeters: pos.coords.accuracy ?? undefined 
+        }),
         (err) => {
-          let errMsg = 'فشل في التقاط موقعك الجغرافي';
+          // If user explicitly denied permission, reject immediately
           if (err.code === err.PERMISSION_DENIED) {
-            errMsg = 'يرجى تفعيل صلاحية تحديد الموقع (GPS) في متصفحك وهاتفك للمتابعة';
+            reject(new Error('يرجى تفعيل صلاحية تحديد الموقع (GPS) في متصفحك وهاتفك للمتابعة'));
+            return;
           }
-          reject(new Error(errMsg));
+
+          console.warn('[GPS Web] High accuracy failed, attempting low accuracy scan...', err);
+
+          // Attempt 2: Coarse/Low Accuracy scan (resolved via cellular/Wi-Fi/IP lookup, much faster indoors)
+          navigator.geolocation.getCurrentPosition(
+            (pos2) => resolve({ 
+              latitude: pos2.coords.latitude, 
+              longitude: pos2.coords.longitude, 
+              approximate: true, 
+              accuracyMeters: pos2.coords.accuracy ?? undefined 
+            }),
+            (err2) => {
+              console.warn('[GPS Web] Low accuracy failed, trying cached fallback...', err2);
+
+              // Attempt 3: Cached fallback (accept cached locations up to 24 hours old)
+              navigator.geolocation.getCurrentPosition(
+                (pos3) => resolve({ 
+                  latitude: pos3.coords.latitude, 
+                  longitude: pos3.coords.longitude, 
+                  approximate: true, 
+                  accuracyMeters: pos3.coords.accuracy ?? undefined 
+                }),
+                (err3) => {
+                  reject(new Error('تعذر تحديد موقعك الجغرافي. يرجى التأكد من تشغيل الـ GPS ووجود اتصال بالشبكة.'));
+                },
+                { enableHighAccuracy: false, timeout: 3000, maximumAge: 86400000 } // 24 hours cached
+              );
+            },
+            { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 } // 5 mins cached
+          );
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 } // 8 seconds timeout
       );
     });
   }
