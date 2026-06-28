@@ -33,12 +33,17 @@ export function usePushNotifications(userId?: string) {
   );
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
 
   // Check if browser is already subscribed (web only)
   const checkSubscription = useCallback(async () => {
     // Skip on native platforms — native push uses FCM/APNS, not Web Push
-    if (Capacitor.isNativePlatform()) return;
+    if (Capacitor.isNativePlatform()) {
+      setIsChecking(false);
+      return;
+    }
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !userId) {
+      setIsChecking(false);
       return;
     }
 
@@ -48,29 +53,43 @@ export function usePushNotifications(userId?: string) {
       setIsSubscribed(!!sub);
     } catch (err) {
       console.error('[PushNotifications] Failed to check subscription status:', err);
+    } finally {
+      setIsChecking(false);
     }
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setIsChecking(false);
+      return;
+    }
 
-    // On mount: CHECK existing subscription status, never auto-register.
-    // Registration must be triggered by explicit user action (subscribeUser button).
-    if (Capacitor.isNativePlatform()) {
-      // On native: check if this user already has a device token saved in the database
-      supabase.from('push_subscriptions')
-        .select('id')
-        .eq('user_id', userId)
-        .not('device_token', 'is', null)
-        .limit(1)
-        .then(({ data }) => {
+    const initCheck = async () => {
+      setIsChecking(true);
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const { data, error } = await supabase
+            .from('push_subscriptions')
+            .select('id')
+            .eq('user_id', userId)
+            .not('device_token', 'is', null)
+            .limit(1);
+
+          if (error) throw error;
           if (data && data.length > 0) {
             setIsSubscribed(true);
           }
-        });
-    } else {
-      checkSubscription();
-    }
+        } else {
+          await checkSubscription();
+        }
+      } catch (err) {
+        console.error('[PushNotifications] Failed to check subscription status:', err);
+      } finally {
+        setIsChecking(false);
+      }
+    };
+
+    initCheck();
   }, [userId, checkSubscription]);
 
   const subscribeUser = useCallback(async () => {
@@ -157,5 +176,6 @@ export function usePushNotifications(userId?: string) {
     isSubscribed,
     subscribeUser,
     loading,
+    isChecking,
   };
 }

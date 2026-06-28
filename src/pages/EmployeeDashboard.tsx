@@ -52,7 +52,7 @@ export default function EmployeeDashboard() {
     queryClient.invalidateQueries({ queryKey: ['tasks', user?.id] });
   });
   const { getCoordinates, loading: isLocating } = useGeoLocation();
-  const { permission, isSubscribed, subscribeUser, loading: isSubscribing } = usePushNotifications(user?.id);
+  const { permission, isSubscribed, subscribeUser, loading: isSubscribing, isChecking: isCheckingPush } = usePushNotifications(user?.id);
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isLogoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
@@ -811,7 +811,7 @@ export default function EmployeeDashboard() {
             </div>
 
             {/* Notification Banner */}
-            {!isSubscribed && permission !== 'granted' && isOnline && (
+            {!isCheckingPush && !isSubscribed && permission !== 'granted' && isOnline && (
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">📢</span>
