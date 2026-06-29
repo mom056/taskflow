@@ -99,7 +99,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v1.3.2'; // current build version
+        const localVersion = 'v1.3.3'; // current build version
 
         if (latestTag && latestTag !== localVersion) {
           setUpdateInfo({
@@ -1055,18 +1055,33 @@ export default function EmployeeDashboard() {
 
       {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-30 shadow-[0_-2px_16px_rgba(0,0,0,0.06)] safe-pb" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-        {([
-          { id: 'active', icon: ClipboardList, label: language === 'ar' ? 'نشطة' : 'Active' },
-          { id: 'completed', icon: CheckSquare, label: language === 'ar' ? 'المنجزة' : 'Completed' },
-        ] as const).map(item => (
-          <button key={item.id} onClick={() => setActiveTab(item.id)}
-            className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === item.id ? 'text-blue-600' : 'text-slate-400'}`}>
-            <div className={`p-1.5 rounded-xl transition-all ${activeTab === item.id ? 'bg-blue-50' : ''}`}>
-              <item.icon className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-semibold">{item.label}</span>
-          </button>
-        ))}
+        <button onClick={() => setActiveTab('active')}
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'active' ? 'text-blue-600' : 'text-slate-400'}`}>
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'active' ? 'bg-blue-50' : ''}`}>
+            <ClipboardList className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-semibold">{language === 'ar' ? 'نشطة' : 'Active'}</span>
+        </button>
+
+        <button onClick={() => setActiveTab('completed')}
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'completed' ? 'text-blue-600' : 'text-slate-400'}`}>
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'completed' ? 'bg-blue-50' : ''}`}>
+            <CheckSquare className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-semibold">{language === 'ar' ? 'المنجزة' : 'Completed'}</span>
+        </button>
+
+        <Link to="/profile"
+          className="flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent text-slate-400 decoration-none no-underline">
+          <div className="w-7 h-7 rounded-full border border-slate-200 hover:border-blue-500 transition-colors flex items-center justify-center overflow-hidden bg-slate-50">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover rounded-full" />
+            ) : (
+              <span className="text-[11px] font-bold text-slate-600">{avatar}</span>
+            )}
+          </div>
+          <span className="text-[10px] font-semibold text-slate-400">{language === 'ar' ? 'ملفي' : 'Profile'}</span>
+        </Link>
       </nav>
 
       {/* ── CREATE TASK MODAL ── */}
