@@ -34,6 +34,7 @@ export default function SuperAdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'premium' | 'basic' | 'free' | 'active' | 'suspended'>('all');
+  const [activeTab, setActiveTab] = useState<'companies' | 'audit_logs' | 'billing'>('companies');
   
   // Edit modal state
   const [editingCompany, setEditingCompany] = useState<CompanyAdminView | null>(null);
@@ -47,6 +48,8 @@ export default function SuperAdminDashboard() {
   const [newCompName, setNewCompName] = useState('');
   const [newCompPlan, setNewCompPlan] = useState<'free' | 'basic' | 'premium'>('free');
   const [newCompMaxEmp, setNewCompMaxEmp] = useState(5);
+  const [newManagerName, setNewManagerName] = useState('');
+  const [newManagerEmail, setNewManagerEmail] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   // Delete confirmation state
@@ -57,11 +60,32 @@ export default function SuperAdminDashboard() {
   const [isLogoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [suspendingCompany, setSuspendingCompany] = useState<CompanyAdminView | null>(null);
 
+  // Platform Audit Logs state
+  interface AuditLog {
+    id: string;
+    admin_id: string;
+    action_type: string;
+    company_name: string;
+    details: any;
+    created_at: string;
+    admin_name?: string;
+  }
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+
+  // Stripe Billing Simulation state
+  const [stripePublicKey, setStripePublicKey] = useState('pk_test_51NxTaskFlowPublicKeyMock123456');
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState('whsec_TaskFlowSigningSecretMock789012');
+  const [selectedSimCompany, setSelectedSimCompany] = useState('');
+  const [simPlan, setSimPlan] = useState<'free' | 'basic' | 'premium'>('free');
+  const [simIsActive, setSimIsActive] = useState(true);
+  const [isSimulating, setIsSimulating] = useState(false);
+
   // Utility to convert Arabic/Persian digits to English digits
   const toEnglishDigits = (str: string) => {
     return str
       .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
-      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷٨٩'.indexOf(d).toString())
       .replace(/[^0-9]/g, '');
   };
 
@@ -121,6 +145,9 @@ export default function SuperAdminDashboard() {
       });
 
       setCompanies(formatted);
+      if (formatted.length > 0 && !selectedSimCompany) {
+        setSelectedSimCompany(formatted[0].id);
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(language === 'ar' ? 'تعذر جلب بيانات الشركات والاشتراكات' : 'Could not fetch companies and subscription data');
@@ -129,9 +156,58 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const fetchAuditLogs = async () => {
+    setIsLogsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('platform_audit_logs')
+        .select(`
+          id,
+          admin_id,
+          action_type,
+          company_name,
+          details,
+          created_at
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Safe lookup of users to pair admin names.
+      const { data: adminUsers, error: adminErr } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('role', 'super_admin');
+
+      const adminMap = new Map((adminUsers || []).map(u => [u.id, u.name]));
+
+      const formatted = (data || []).map((log: any) => ({
+        id: log.id,
+        admin_id: log.admin_id,
+        action_type: log.action_type,
+        company_name: log.company_name,
+        details: log.details,
+        created_at: log.created_at,
+        admin_name: adminMap.get(log.admin_id) || (language === 'ar' ? 'مشرف عام' : 'Super Admin')
+      }));
+
+      setAuditLogs(formatted);
+    } catch (err: any) {
+      console.error('Error fetching audit logs:', err);
+      toast.error(language === 'ar' ? 'تعذر جلب سجلات النظام' : 'Could not fetch platform audit logs');
+    } finally {
+      setIsLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    if (activeTab === 'audit_logs') {
+      fetchAuditLogs();
+    }
+  }, [activeTab]);
 
+  useEffect(() => {
     const rand = Math.random().toString(36).substring(2, 15);
     const companiesChan = supabase
       .channel(`companies_all_${rand}`)
@@ -180,6 +256,14 @@ export default function SuperAdminDashboard() {
 
       if (error) throw error;
 
+      // Log activation
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'activate_company',
+        company_name: comp.name,
+        details: { company_id: comp.id }
+      }]);
+
       triggerHaptic('success');
       toast.success(
         language === 'ar' 
@@ -202,6 +286,14 @@ export default function SuperAdminDashboard() {
         .eq('id', suspendingCompany.id);
 
       if (error) throw error;
+
+      // Log suspension
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'suspend_company',
+        company_name: suspendingCompany.name,
+        details: { company_id: suspendingCompany.id }
+      }]);
 
       triggerHaptic('success');
       toast.success(
@@ -233,6 +325,20 @@ export default function SuperAdminDashboard() {
         .eq('id', editingCompany.id);
 
       if (error) throw error;
+
+      // Log plan update
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'update_plan',
+        company_name: editingCompany.name,
+        details: { 
+          company_id: editingCompany.id,
+          old_plan: editingCompany.plan,
+          new_plan: editPlan,
+          old_max_employees: editingCompany.maxEmployees,
+          new_max_employees: editMaxEmployees
+        }
+      }]);
 
       triggerHaptic('success');
       toast.success(language === 'ar' ? 'تم تحديث الشركة وباقة الاشتراك بنجاح' : 'Company and subscription plan updated successfully');
@@ -274,7 +380,7 @@ export default function SuperAdminDashboard() {
     setIsAdding(true);
     try {
       const slug = newCompName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\u0600-\u06FF-]/g, '');
-      const { error } = await supabase
+      const { data: compData, error } = await supabase
         .from('companies')
         .insert([{
           name: newCompName.trim(),
@@ -282,24 +388,59 @@ export default function SuperAdminDashboard() {
           plan: newCompPlan,
           max_employees: newCompMaxEmp,
           created_at: Date.now()
-        }]);
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error || !compData) throw error || new Error('Failed to retrieve created company');
+
+      // Call create-user edge function to register the manager
+      if (newManagerEmail.trim() && newManagerName.trim()) {
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('create-user', {
+          body: {
+            action: 'create_manager_for_company',
+            email: newManagerEmail.trim(),
+            name: newManagerName.trim(),
+            targetCompanyId: compData.id,
+            redirectTo: `${window.location.origin}/reset-password`
+          }
+        });
+
+        if (edgeError || edgeData?.error) {
+          // Roll back company creation on failure
+          await supabase.from('companies').delete().eq('id', compData.id);
+          throw new Error(edgeError?.message || edgeData?.error || 'Failed to create manager account');
+        }
+      }
+
+      // Log company registration
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'create_company',
+        company_name: newCompName.trim(),
+        details: { 
+          plan: newCompPlan, 
+          max_employees: newCompMaxEmp,
+          manager_email: newManagerEmail.trim() || null
+        }
+      }]);
 
       triggerHaptic('success');
       toast.success(
         language === 'ar' 
-          ? `تم إنشاء شركة "${newCompName.trim()}" بنجاح`
-          : `Company "${newCompName.trim()}" created successfully`
+          ? `تم إنشاء شركة "${newCompName.trim()}" وتعيين المدير بنجاح`
+          : `Company "${newCompName.trim()}" created and manager provisioned successfully`
       );
       setShowAddModal(false);
       setNewCompName('');
       setNewCompPlan('free');
       setNewCompMaxEmp(5);
+      setNewManagerName('');
+      setNewManagerEmail('');
       fetchData();
     } catch (err: any) {
       triggerHaptic('error');
-      toast.error(err.message || (language === 'ar' ? 'تعذر إنشاء الشركة' : 'Could not create company'));
+      toast.error(err.message || (language === 'ar' ? 'تعذر إنشاء الشركة والمدير' : 'Could not create company and manager'));
     } finally {
       setIsAdding(false);
     }
@@ -310,7 +451,6 @@ export default function SuperAdminDashboard() {
 
     setIsDeleting(true);
     try {
-      // Delete all users belonging to this company from auth (cascades to public.users)
       const { data: edgeData, error: edgeError } = await supabase.functions.invoke('create-user', {
         body: {
           action: 'delete_company',
@@ -321,13 +461,24 @@ export default function SuperAdminDashboard() {
       if (edgeError) throw new Error(edgeError.message || 'Failed to delete company users from Auth');
       if (edgeData?.error) throw new Error(edgeData.error);
 
-      // Then delete the company
       const { error: compError } = await supabase
         .from('companies')
         .delete()
         .eq('id', deletingCompany.id);
 
       if (compError) throw compError;
+
+      // Log deletion
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'delete_company',
+        company_name: deletingCompany.name,
+        details: { 
+          company_id: deletingCompany.id,
+          employee_count: deletingCompany.employeeCount,
+          manager_count: deletingCompany.managers.length
+        }
+      }]);
 
       triggerHaptic('success');
       toast.success(
@@ -345,6 +496,55 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const handleSimulateWebhook = async () => {
+    if (!selectedSimCompany) {
+      return toast.error(language === 'ar' ? 'يرجى اختيار شركة أولاً' : 'Please select a company first');
+    }
+    
+    setIsSimulating(true);
+    try {
+      const selectedCompanyObj = companies.find(c => c.id === selectedSimCompany);
+      const companyName = selectedCompanyObj ? selectedCompanyObj.name : 'Unknown';
+
+      const { error } = await supabase
+        .from('companies')
+        .update({
+          plan: simPlan,
+          is_active: simIsActive
+        })
+        .eq('id', selectedSimCompany);
+
+      if (error) throw error;
+
+      // Log the Stripe Webhook Event
+      await supabase.from('platform_audit_logs').insert([{
+        admin_id: profile?.id || null,
+        action_type: 'stripe_webhook_received',
+        company_name: companyName,
+        details: {
+          event: 'customer.subscription.updated',
+          company_id: selectedSimCompany,
+          new_plan: simPlan,
+          is_active: simIsActive,
+          source: 'Stripe Mock Webhook Simulator'
+        }
+      }]);
+
+      triggerHaptic('success');
+      toast.success(
+        language === 'ar' 
+          ? `تمت محاكاة ويب هوك Stripe بنجاح وتحديث الشركة!` 
+          : `Stripe Webhook simulation succeeded, company updated!`
+      );
+      fetchData();
+    } catch (err: any) {
+      triggerHaptic('error');
+      toast.error(err.message || 'Webhook simulation failed');
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen bg-slate-50 font-sans overflow-hidden text-slate-900" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
@@ -357,10 +557,35 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        <nav className="flex flex-col flex-1 gap-1">
-          <button className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none bg-blue-600 text-white shadow-md cursor-pointer w-full`}>
+        <nav className="flex flex-col flex-1 gap-1.5">
+          <button 
+            onClick={() => setActiveTab('companies')}
+            className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none cursor-pointer w-full transition ${
+              activeTab === 'companies' ? 'bg-blue-600 text-white shadow-md' : 'bg-transparent text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
             <Building className={`w-5 h-5 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} />
             {language === 'ar' ? 'إدارة الشركات والاشتراكات' : 'Manage Companies'}
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('audit_logs')}
+            className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none cursor-pointer w-full transition ${
+              activeTab === 'audit_logs' ? 'bg-blue-600 text-white shadow-md' : 'bg-transparent text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
+            <Shield className={`w-5 h-5 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} />
+            {language === 'ar' ? 'سجلات النظام العامة' : 'Platform Audit Logs'}
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('billing')}
+            className={`flex justify-start items-center px-4 py-3 rounded-xl font-medium border-none cursor-pointer w-full transition ${
+              activeTab === 'billing' ? 'bg-blue-600 text-white shadow-md' : 'bg-transparent text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
+            <CreditCard className={`w-5 h-5 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} />
+            {language === 'ar' ? 'إعدادات الفوترة و Stripe' : 'Stripe & Billing Setup'}
           </button>
         </nav>
 
@@ -416,20 +641,52 @@ export default function SuperAdminDashboard() {
           </div>
         </header>
 
+        {/* Mobile Tab Selector */}
+        <div className="flex md:hidden bg-slate-900 border-t border-slate-800 px-4 py-2 overflow-x-auto gap-2 shrink-0">
+          <button 
+            onClick={() => setActiveTab('companies')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition ${
+              activeTab === 'companies' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {language === 'ar' ? 'الشركات' : 'Companies'}
+          </button>
+          <button 
+            onClick={() => setActiveTab('audit_logs')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition ${
+              activeTab === 'audit_logs' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {language === 'ar' ? 'سجلات النظام' : 'Audit Logs'}
+          </button>
+          <button 
+            onClick={() => setActiveTab('billing')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition ${
+              activeTab === 'billing' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {language === 'ar' ? 'الفوترة' : 'Billing'}
+          </button>
+        </div>
+
         {/* Desktop Header */}
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-4 items-center justify-between shrink-0">
           <div>
             <h1 className="text-xl font-bold text-slate-900 m-0">
-              {language === 'ar' ? 'التحكم في الشركات والاشتراكات' : 'Companies & Subscriptions'}
+              {activeTab === 'companies' && (language === 'ar' ? 'التحكم في الشركات والاشتراكات' : 'Companies & Subscriptions')}
+              {activeTab === 'audit_logs' && (language === 'ar' ? 'سجلات تدقيق المنصة' : 'Platform Audit Logs')}
+              {activeTab === 'billing' && (language === 'ar' ? 'إعدادات Stripe والفوترة' : 'Stripe & Billing Setup')}
             </h1>
             <p className="text-slate-400 text-sm mt-0.5 m-0">
-              {language === 'ar' ? 'مراقبة باقات الخدمة لجميع عملاء المنصة' : 'Monitor service packages for all platform clients'}
+              {activeTab === 'companies' && (language === 'ar' ? 'مراقبة باقات الخدمة لجميع عملاء المنصة' : 'Monitor service packages for all platform clients')}
+              {activeTab === 'audit_logs' && (language === 'ar' ? 'استعراض تاريخ ومسارات عمليات المشرفين والاشتراكات' : 'Review historical events and admin actions')}
+              {activeTab === 'billing' && (language === 'ar' ? 'تهيئة بوابات الدفع ومحاكاة استقبال ويب هوك Stripe' : 'Configure payment gateways and simulate Stripe webhook signals')}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <NotificationCenter />
             <button 
-              onClick={fetchData} 
+              onClick={activeTab === 'audit_logs' ? fetchAuditLogs : fetchData} 
               className="p-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
             >
               <RefreshCcw className="w-4 h-4" />
@@ -439,244 +696,448 @@ export default function SuperAdminDashboard() {
 
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto relative">
-          <PullToRefresh onRefresh={fetchData}>
+          <PullToRefresh onRefresh={activeTab === 'audit_logs' ? fetchAuditLogs : fetchData}>
             <div className="p-4 md:p-8 space-y-6">
-          {isLoading && (
-            <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
-              <AppLoader size={44} />
-            </div>
-          )}
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
-              <Building className="w-6 h-6 text-blue-500 mb-2" />
-              <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
-              <div className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? 'إجمالي الشركات' : 'Total Companies'}
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
-              <Users className="w-6 h-6 text-green-500 mb-2" />
-              <div className="text-2xl font-bold text-slate-900">{stats.totalEmployees}</div>
-              <div className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? 'إجمالي الموظفين' : 'Total Employees'}
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
-              <CreditCard className="w-6 h-6 text-purple-500 mb-2" />
-              <div className="text-2xl font-bold text-slate-900">{stats.premium}</div>
-              <div className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? 'باقات Premium' : 'Premium Plans'}
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
-              <CreditCard className="w-6 h-6 text-amber-500 mb-2" />
-              <div className="text-2xl font-bold text-slate-900">{stats.basic}</div>
-              <div className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? 'باقات Basic' : 'Basic Plans'}
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
-              <CreditCard className="w-6 h-6 text-slate-500 mb-2" />
-              <div className="text-2xl font-bold text-slate-900">{stats.free}</div>
-              <div className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? 'باقات مجانية' : 'Free Plans'}
-              </div>
-            </div>
-            <div className="bg-linear-to-br from-blue-600 to-indigo-700 p-5 rounded-2xl text-white shadow-md col-span-2 lg:col-span-1">
-              <TrendingUp className="w-6 h-6 text-blue-200 mb-2" />
-              <div className="text-2xl font-bold">${stats.estimatedMRR}</div>
-              <div className="text-xs text-blue-100 mt-1">
-                {language === 'ar' ? 'العوائد الشهرية المتوقعة (MRR)' : 'Estimated MRR'}
-              </div>
-            </div>
-          </div>
-
-          {/* Search Table Card */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 space-y-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <h3 className="font-bold text-slate-900 text-base m-0">
-                  {language === 'ar' ? 'قائمة الشركات والعملاء' : 'Companies & Clients'}
-                </h3>
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition border-none cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {language === 'ar' ? 'إضافة شركة' : 'Add Company'}
-                  </button>
-                  <div className="relative flex-1 sm:w-72">
-                    <input 
-                      type="text" 
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      placeholder={language === 'ar' ? 'ابحث باسم الشركة أو المدير...' : 'Search by company or manager...'}
-                      className={`w-full py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm ${language === 'ar' ? 'pl-3 pr-10' : 'pr-3 pl-10'}`}
-                    />
-                    <Search className={`absolute top-3 w-4 h-4 text-slate-400 ${language === 'ar' ? 'right-3' : 'left-3'}`} />
-                  </div>
+              {isLoading && activeTab === 'companies' && (
+                <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs z-20 flex items-center justify-center">
+                  <AppLoader size={44} />
                 </div>
-              </div>
+              )}
 
-              {/* Filters Tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                <button 
-                  onClick={() => setStatusFilter('all')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {language === 'ar' ? `الكل (${companies.length})` : `All (${companies.length})`}
-                </button>
-                <button 
-                  onClick={() => setStatusFilter('premium')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'premium' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Premium ({companies.filter(c => c.plan === 'premium').length})
-                </button>
-                <button 
-                  onClick={() => setStatusFilter('basic')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'basic' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Basic ({companies.filter(c => c.plan === 'basic').length})
-                </button>
-                <button 
-                  onClick={() => setStatusFilter('free')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'free' ? 'bg-slate-700 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Free ({companies.filter(c => c.plan === 'free').length})
-                </button>
-                <button 
-                  onClick={() => setStatusFilter('active')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'active' ? 'bg-green-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {language === 'ar' ? `نشط (${companies.filter(c => c.isActive).length})` : `Active (${companies.filter(c => c.isActive).length})`}
-                </button>
-                <button 
-                  onClick={() => setStatusFilter('suspended')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
-                    statusFilter === 'suspended' ? 'bg-red-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {language === 'ar' ? `موقوف (${companies.filter(c => !c.isActive).length})` : `Suspended (${companies.filter(c => !c.isActive).length})`}
-                </button>
-              </div>
-            </div>
+              {/* ── COMPANIES TAB CONTENT ── */}
+              {activeTab === 'companies' && (
+                <>
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                      <Building className="w-6 h-6 text-blue-500 mb-2" />
+                      <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {language === 'ar' ? 'إجمالي الشركات' : 'Total Companies'}
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                      <Users className="w-6 h-6 text-green-500 mb-2" />
+                      <div className="text-2xl font-bold text-slate-900">{stats.totalEmployees}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {language === 'ar' ? 'إجمالي الموظفين' : 'Total Employees'}
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                      <CreditCard className="w-6 h-6 text-purple-500 mb-2" />
+                      <div className="text-2xl font-bold text-slate-900">{stats.premium}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {language === 'ar' ? 'باقات Premium' : 'Premium Plans'}
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                      <CreditCard className="w-6 h-6 text-amber-500 mb-2" />
+                      <div className="text-2xl font-bold text-slate-900">{stats.basic}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {language === 'ar' ? 'باقات Basic' : 'Basic Plans'}
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                      <CreditCard className="w-6 h-6 text-slate-500 mb-2" />
+                      <div className="text-2xl font-bold text-slate-900">{stats.free}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {language === 'ar' ? 'باقات مجانية' : 'Free Plans'}
+                      </div>
+                    </div>
+                    <div className="bg-linear-to-br from-blue-600 to-indigo-700 p-5 rounded-2xl text-white shadow-md col-span-2 lg:col-span-1">
+                      <TrendingUp className="w-6 h-6 text-blue-200 mb-2" />
+                      <div className="text-2xl font-bold">${stats.estimatedMRR}</div>
+                      <div className="text-xs text-blue-100 mt-1">
+                        {language === 'ar' ? 'العوائد الشهرية المتوقعة (MRR)' : 'Estimated MRR'}
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="overflow-x-auto">
-              <table className={`w-full ${language === 'ar' ? 'text-right' : 'text-left'} border-collapse`}>
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-semibold">
-                    <th className="p-4">{language === 'ar' ? 'اسم الشركة' : 'Company Name'}</th>
-                    <th className="p-4">{language === 'ar' ? 'المدير المسؤول' : 'Manager'}</th>
-                    <th className="p-4">{language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}</th>
-                    <th className="p-4 text-center">{language === 'ar' ? 'باقة الاشتراك' : 'Plan'}</th>
-                    <th className="p-4 text-center">{language === 'ar' ? 'استهلاك الموظفين' : 'Employees Consumption'}</th>
-                    <th className="p-4 text-center">{language === 'ar' ? 'الحد الأقصى' : 'Max Limit'}</th>
-                    <th className="p-4 text-center">{language === 'ar' ? 'التحكم' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 text-sm">
-                  {filteredCompanies.length > 0 ? (
-                    filteredCompanies.map(c => {
-                      const progressPercentage = Math.min((c.employeeCount / c.maxEmployees) * 100, 100);
-                      const isNearLimit = c.employeeCount >= c.maxEmployees * 0.8;
-                      const isFull = c.employeeCount >= c.maxEmployees;
+                  {/* Search Table Card */}
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in">
+                    <div className="p-5 border-b border-slate-100 space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                        <h3 className="font-bold text-slate-900 text-base m-0">
+                          {language === 'ar' ? 'قائمة الشركات والعملاء' : 'Companies & Clients'}
+                        </h3>
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                          <button
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition border-none cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-4 h-4" />
+                            {language === 'ar' ? 'إضافة شركة' : 'Add Company'}
+                          </button>
+                          <div className="relative flex-1 sm:w-72">
+                            <input 
+                              type="text" 
+                              value={searchQuery}
+                              onChange={e => setSearchQuery(e.target.value)}
+                              placeholder={language === 'ar' ? 'ابحث باسم الشركة أو المدير...' : 'Search by company or manager...'}
+                              className={`w-full py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm ${language === 'ar' ? 'pl-3 pr-10' : 'pr-3 pl-10'}`}
+                            />
+                            <Search className={`absolute top-3 w-4 h-4 text-slate-400 ${language === 'ar' ? 'right-3' : 'left-3'}`} />
+                          </div>
+                        </div>
+                      </div>
 
-                      return (
-                        <tr key={c.id} className={`hover:bg-slate-50/50 transition-colors ${!c.isActive ? 'bg-red-50/20' : ''}`}>
-                          <td className="p-4 font-bold text-slate-800">
-                            <div className="flex items-center gap-2">
-                              <span>{c.name}</span>
-                              {!c.isActive && (
-                                <span className="px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded-full font-bold">
-                                  {language === 'ar' ? 'موقوف' : 'Suspended'}
+                      {/* Filters Tabs */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        <button 
+                          onClick={() => setStatusFilter('all')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {language === 'ar' ? `الكل (${companies.length})` : `All (${companies.length})`}
+                        </button>
+                        <button 
+                          onClick={() => setStatusFilter('premium')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'premium' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Premium ({companies.filter(c => c.plan === 'premium').length})
+                        </button>
+                        <button 
+                          onClick={() => setStatusFilter('basic')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'basic' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Basic ({companies.filter(c => c.plan === 'basic').length})
+                        </button>
+                        <button 
+                          onClick={() => setStatusFilter('free')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'free' ? 'bg-slate-700 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Free ({companies.filter(c => c.plan === 'free').length})
+                        </button>
+                        <button 
+                          onClick={() => setStatusFilter('active')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'active' ? 'bg-green-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {language === 'ar' ? `نشط (${companies.filter(c => c.isActive).length})` : `Active (${companies.filter(c => c.isActive).length})`}
+                        </button>
+                        <button 
+                          onClick={() => setStatusFilter('suspended')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors border-none cursor-pointer ${
+                            statusFilter === 'suspended' ? 'bg-red-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {language === 'ar' ? `موقوف (${companies.filter(c => !c.isActive).length})` : `Suspended (${companies.filter(c => !c.isActive).length})`}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className={`w-full ${language === 'ar' ? 'text-right' : 'text-left'} border-collapse`}>
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-semibold">
+                            <th className="p-4">{language === 'ar' ? 'اسم الشركة' : 'Company Name'}</th>
+                            <th className="p-4">{language === 'ar' ? 'المدير المسؤول' : 'Manager'}</th>
+                            <th className="p-4">{language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}</th>
+                            <th className="p-4 text-center">{language === 'ar' ? 'باقة الاشتراك' : 'Plan'}</th>
+                            <th className="p-4 text-center">{language === 'ar' ? 'استهلاك الموظفين' : 'Employees Consumption'}</th>
+                            <th className="p-4 text-center">{language === 'ar' ? 'الحد الأقصى' : 'Max Limit'}</th>
+                            <th className="p-4 text-center">{language === 'ar' ? 'التحكم' : 'Actions'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-sm">
+                          {filteredCompanies.length > 0 ? (
+                            filteredCompanies.map(c => {
+                              const progressPercentage = Math.min((c.employeeCount / c.maxEmployees) * 100, 100);
+                              const isNearLimit = c.employeeCount >= c.maxEmployees * 0.8;
+                              const isFull = c.employeeCount >= c.maxEmployees;
+
+                              return (
+                                <tr key={c.id} className={`hover:bg-slate-50/50 transition-colors ${!c.isActive ? 'bg-red-50/20' : ''}`}>
+                                  <td className="p-4 font-bold text-slate-800">
+                                    <div className="flex items-center gap-2">
+                                      <span>{c.name}</span>
+                                      {!c.isActive && (
+                                        <span className="px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded-full font-bold">
+                                          {language === 'ar' ? 'موقوف' : 'Suspended'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-slate-600">{c.managers[0]?.name || (language === 'ar' ? 'غير محدد' : 'Unspecified')}</td>
+                                  <td className="p-4 text-slate-500 font-mono text-xs">{c.managers[0]?.email || '-'}</td>
+                                  <td className="p-4 text-center">
+                                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                                      c.plan === 'premium' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                      c.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                                      'bg-slate-50 text-slate-700 border border-slate-100'
+                                    }`}>
+                                      {c.plan}
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <div className="flex flex-col items-center justify-center gap-1 min-w-[120px]">
+                                      <span className="font-semibold text-slate-700 text-xs">
+                                        {c.employeeCount} / {c.maxEmployees} {language === 'ar' ? 'موظف' : 'employees'}
+                                      </span>
+                                      <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full rounded-full transition-all duration-300 ${
+                                            isFull ? 'bg-red-500' : isNearLimit ? 'bg-amber-500' : 'bg-blue-600'
+                                          }`} 
+                                          style={{ width: `${progressPercentage}%` }} 
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-center font-bold text-blue-600">{c.maxEmployees}</td>
+                                  <td className="p-4 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => handleToggleActive(c)}
+                                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border-none transition-colors cursor-pointer ${
+                                          c.isActive 
+                                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' 
+                                            : 'bg-green-50 hover:bg-green-100 text-green-700'
+                                        }`}
+                                      >
+                                        {c.isActive 
+                                          ? (language === 'ar' ? 'تعطيل' : 'Suspend') 
+                                          : (language === 'ar' ? 'تنشيط' : 'Activate')}
+                                      </button>
+                                      <button
+                                        onClick={() => handleOpenEdit(c)}
+                                        className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                                        title={language === 'ar' ? 'تعديل' : 'Edit'}
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeletingCompany(c)}
+                                        className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                                        title={language === 'ar' ? 'حذف' : 'Delete'}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="text-center p-8 text-slate-400">
+                                {language === 'ar' ? 'لا يوجد شركات متطابقة مع البحث' : 'No companies found'}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── AUDIT LOGS TAB CONTENT ── */}
+              {activeTab === 'audit_logs' && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in">
+                  <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-900 text-base m-0">
+                      {language === 'ar' ? 'سجل تدقيق العمليات والنظام' : 'Platform Audit logs'}
+                    </h3>
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-600">
+                      {auditLogs.length} {language === 'ar' ? 'عملية مسجلة' : 'events logged'}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {isLogsLoading ? (
+                      <div className="p-12 text-center">
+                        <AppLoader size={32} />
+                      </div>
+                    ) : auditLogs.length > 0 ? (
+                      auditLogs.map(log => {
+                        const dateStr = new Date(log.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US');
+                        return (
+                          <div key={log.id} className="p-4 hover:bg-slate-50/50 transition-colors flex gap-4 items-start">
+                            <div className={`p-2.5 rounded-xl shrink-0 ${
+                              log.action_type === 'stripe_webhook_received' ? 'bg-indigo-50 text-indigo-600' :
+                              log.action_type === 'delete_company' ? 'bg-red-50 text-red-600' :
+                              log.action_type === 'suspend_company' ? 'bg-amber-50 text-amber-600' :
+                              log.action_type === 'create_company' ? 'bg-green-50 text-green-600' :
+                              'bg-blue-50 text-blue-600'
+                            }`}>
+                              {log.action_type === 'stripe_webhook_received' ? <CreditCard className="w-5 h-5" /> :
+                               log.action_type === 'delete_company' ? <Trash2 className="w-5 h-5" /> :
+                               log.action_type === 'suspend_company' ? <AlertTriangle className="w-5 h-5" /> :
+                               log.action_type === 'create_company' ? <Building className="w-5 h-5" /> :
+                               <Shield className="w-5 h-5" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                <span className="font-bold text-slate-800 text-sm">
+                                  {log.action_type === 'create_company' && (language === 'ar' ? `إنشاء شركة جديدة: ${log.company_name}` : `Created new company: ${log.company_name}`)}
+                                  {log.action_type === 'delete_company' && (language === 'ar' ? `حذف الشركة بالكامل: ${log.company_name}` : `Deleted company: ${log.company_name}`)}
+                                  {log.action_type === 'suspend_company' && (language === 'ar' ? `إيقاف شركة مؤقتاً: ${log.company_name}` : `Suspended company: ${log.company_name}`)}
+                                  {log.action_type === 'activate_company' && (language === 'ar' ? `إعادة تفعيل شركة: ${log.company_name}` : `Activated company: ${log.company_name}`)}
+                                  {log.action_type === 'update_plan' && (language === 'ar' ? `تعديل باقة الاشتراك للشركة: ${log.company_name}` : `Updated company subscription: ${log.company_name}`)}
+                                  {log.action_type === 'stripe_webhook_received' && (language === 'ar' ? `استلام ويب هوك Stripe لشركة: ${log.company_name}` : `Stripe webhook processed for: ${log.company_name}`)}
                                 </span>
+                                <span className="text-[11px] text-slate-400 font-mono">{dateStr}</span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1 m-0">
+                                {language === 'ar' ? 'بواسطة المشرف:' : 'Performed by admin:'} <strong className="text-slate-700">{log.admin_name}</strong>
+                              </p>
+                              {log.details && (
+                                <pre className="mt-2 p-3 bg-slate-50 rounded-xl text-[11px] text-slate-600 font-mono overflow-x-auto max-h-32 border border-slate-100">
+                                  {JSON.stringify(log.details, null, 2)}
+                                </pre>
                               )}
                             </div>
-                          </td>
-                          <td className="p-4 text-slate-600">{c.managers[0]?.name || (language === 'ar' ? 'غير محدد' : 'Unspecified')}</td>
-                          <td className="p-4 text-slate-500 font-mono text-xs">{c.managers[0]?.email || '-'}</td>
-                          <td className="p-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
-                              c.plan === 'premium' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                              c.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                              'bg-slate-50 text-slate-700 border border-slate-100'
-                            }`}>
-                              {c.plan}
-                            </span>
-                          </td>
-                          <td className="p-4 text-center">
-                            <div className="flex flex-col items-center justify-center gap-1 min-w-[120px]">
-                              <span className="font-semibold text-slate-700 text-xs">
-                                {c.employeeCount} / {c.maxEmployees} {language === 'ar' ? 'موظف' : 'employees'}
-                              </span>
-                              <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full transition-all duration-300 ${
-                                    isFull ? 'bg-red-500' : isNearLimit ? 'bg-amber-500' : 'bg-blue-600'
-                                  }`} 
-                                  style={{ width: `${progressPercentage}%` }} 
-                                />
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center font-bold text-blue-600">{c.maxEmployees}</td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => handleToggleActive(c)}
-                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border-none transition-colors cursor-pointer ${
-                                  c.isActive 
-                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' 
-                                    : 'bg-green-50 hover:bg-green-100 text-green-700'
-                                }`}
-                              >
-                                {c.isActive 
-                                  ? (language === 'ar' ? 'تعطيل' : 'Suspend') 
-                                  : (language === 'ar' ? 'تنشيط' : 'Activate')}
-                              </button>
-                              <button
-                                onClick={() => handleOpenEdit(c)}
-                                className="p-2 hover:bg-slate-100 text-blue-600 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
-                                title={language === 'ar' ? 'تعديل' : 'Edit'}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setDeletingCompany(c)}
-                                className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
-                                title={language === 'ar' ? 'حذف' : 'Delete'}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="text-center p-8 text-slate-400">
-                        {language === 'ar' ? 'لا يوجد شركات متطابقة مع البحث' : 'No companies found'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-12 text-center text-slate-400">
+                        {language === 'ar' ? 'لا يوجد سجلات نظام مسجلة حالياً' : 'No platform events logged yet'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── STRIPE & BILLING SETUP TAB CONTENT ── */}
+              {activeTab === 'billing' && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 animate-fade-in">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <h3 className="font-bold text-slate-900 text-base m-0">
+                        {language === 'ar' ? 'إعدادات بوابة الفوترة Stripe' : 'Stripe Payment Gateway Config'}
+                      </h3>
+                    </div>
+                    <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
+                      {language === 'ar' 
+                        ? 'قم بتهيئة مفاتيح الاتصال بخوادم Stripe وتعيين مسار استقبال إشعارات الدفع (Webhooks) لتمكين الترقية والخصم التلقائي للباقات لجميع الحسابات.'
+                        : 'Configure Stripe API credentials and set webhook endpoints to allow automatic subscription renewals, upgrades, and billing events across the platform.'}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                          {language === 'ar' ? 'المفتاح العام (Publishable Key)' : 'Stripe Publishable Key'}
+                        </label>
+                        <input 
+                          type="text" 
+                          value={stripePublicKey}
+                          onChange={e => setStripePublicKey(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                          {language === 'ar' ? 'توقيع إشعار الويب (Webhook Signing Secret)' : 'Webhook Signing Secret'}
+                        </label>
+                        <input 
+                          type="text" 
+                          value={stripeWebhookSecret}
+                          onChange={e => setStripeWebhookSecret(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 block animate-pulse"></span>
+                        {language === 'ar' ? 'اتصال بوابة الدفع نشط (محاكاة)' : 'Payment connection active (mocked)'}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          triggerHaptic('success');
+                          toast.success(language === 'ar' ? 'تم حفظ إعدادات Stripe بنجاح' : 'Stripe configuration saved successfully');
+                        }}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl border-none cursor-pointer"
+                      >
+                        {language === 'ar' ? 'حفظ التغييرات' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Webhook Simulation Card */}
+                  <div className="bg-slate-950 rounded-2xl text-slate-300 p-6 shadow-md border border-slate-800 animate-fade-in">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-indigo-950/80 text-indigo-400 rounded-xl">
+                        <RefreshCcw className="w-4 h-4" />
+                      </div>
+                      <h3 className="font-bold text-white text-base m-0">
+                        {language === 'ar' ? 'مُحاكي إشعارات الدفع (Stripe Webhook Simulator)' : 'Stripe Webhook Simulator'}
+                      </h3>
+                    </div>
+                    <p className="text-slate-400 text-xs leading-relaxed max-w-2xl">
+                      {language === 'ar' 
+                        ? 'استخدم هذا المحاكي لإطلاق حدث الدفع للعميل ومزامنة الترقية أو إيقاف الخدمة فورياً، للتحقق من تكامل إشعارات Stripe المباشرة.'
+                        : 'Simulate Stripe webhook events to verify correct updates on plan upgrades, downgrades, and billing suspension without making actual API payments.'}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                          {language === 'ar' ? 'اختر الشركة المستهدفة' : 'Select Target Company'}
+                        </label>
+                        <select 
+                          value={selectedSimCompany}
+                          onChange={e => setSelectedSimCompany(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
+                        >
+                          {companies.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                          {language === 'ar' ? 'باقة الاشتراك الجديدة' : 'Target Subscription Plan'}
+                        </label>
+                        <select 
+                          value={simPlan}
+                          onChange={e => setSimPlan(e.target.value as any)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
+                        >
+                          <option value="free">Free Plan</option>
+                          <option value="basic">Basic Plan</option>
+                          <option value="premium">Premium Plan</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                          {language === 'ar' ? 'حالة نشاط الفوترة' : 'Billing Active Status'}
+                        </label>
+                        <select 
+                          value={simIsActive ? 'active' : 'suspended'}
+                          onChange={e => setSimIsActive(e.target.value === 'active')}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
+                        >
+                          <option value="active">{language === 'ar' ? 'نشط (دفع مكتمل)' : 'Active (Paid)'}</option>
+                          <option value="suspended">{language === 'ar' ? 'موقوف (فشل الدفع)' : 'Suspended (Unpaid)'}</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <button 
+                          onClick={handleSimulateWebhook}
+                          disabled={isSimulating}
+                          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl border-none cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          {isSimulating ? (language === 'ar' ? 'جاري المحاكاة...' : 'Simulating...') : <><RefreshCcw className="w-3.5 h-3.5" /> {language === 'ar' ? 'إطلاق ويب هوك' : 'Trigger Webhook'}</>}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </PullToRefresh>
         </div>
@@ -769,7 +1230,7 @@ export default function SuperAdminDashboard() {
           <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl" dir={language === 'ar' ? 'rtl' : 'ltr'}>
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-900 text-base m-0">
-                {language === 'ar' ? 'إضافة شركة جديدة' : 'Add New Company'}
+                {language === 'ar' ? 'إضافة شركة جديدة مع المدير المسؤول' : 'Add New Company & Manager'}
               </h3>
               <button 
                 onClick={() => setShowAddModal(false)}
@@ -780,7 +1241,7 @@ export default function SuperAdminDashboard() {
             </div>
             
             <form onSubmit={handleAddCompany}>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     {language === 'ar' ? 'اسم الشركة' : 'Company Name'}
@@ -794,6 +1255,37 @@ export default function SuperAdminDashboard() {
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
+                
+                {/* Manager Name */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    {language === 'ar' ? 'اسم مدير الحساب' : 'Manager Name'}
+                  </label>
+                  <input 
+                    type="text" 
+                    value={newManagerName}
+                    onChange={e => setNewManagerName(e.target.value)}
+                    required
+                    placeholder={language === 'ar' ? 'أحمد محمد' : 'John Doe'}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Manager Email */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    {language === 'ar' ? 'البريد الإلكتروني للمدير' : 'Manager Email'}
+                  </label>
+                  <input 
+                    type="email" 
+                    value={newManagerEmail}
+                    onChange={e => setNewManagerEmail(e.target.value)}
+                    required
+                    placeholder="manager@company.com"
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     {language === 'ar' ? 'باقة الخدمة' : 'Service Plan'}
@@ -808,6 +1300,7 @@ export default function SuperAdminDashboard() {
                     <option value="premium">Premium Plan</option>
                   </select>
                 </div>
+                
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     {language === 'ar' ? 'الحد الأقصى للموظفين' : 'Max Employees Limit'}
@@ -830,7 +1323,7 @@ export default function SuperAdminDashboard() {
                   disabled={isAdding}
                   className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 text-sm border-none cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {isAdding ? (language === 'ar' ? 'جاري الإنشاء...' : 'Creating...') : <><Plus className="w-4 h-4" /> {language === 'ar' ? 'إنشاء الشركة' : 'Create Company'}</>}
+                  {isAdding ? (language === 'ar' ? 'جاري الإنشاء والربط...' : 'Creating & Linking...') : <><Plus className="w-4 h-4" /> {language === 'ar' ? 'إنشاء الشركة والمدير' : 'Create Company & Manager'}</>}
                 </button>
                 <button 
                   type="button" 
@@ -961,7 +1454,6 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

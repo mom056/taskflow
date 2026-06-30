@@ -194,6 +194,90 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
 
+    } else if (action === 'create_manager_for_company') {
+      if (callerProfile.role !== 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Access denied: Only super admins can use this action' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { email, name, targetCompanyId, redirectTo } = body;
+      if (!email || !name || !targetCompanyId) {
+        return new Response(JSON.stringify({ error: 'Email, name, and targetCompanyId are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return new Response(JSON.stringify({ error: 'Invalid email format' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Generate cryptographically secure random password
+      const array = new Uint8Array(16);
+      crypto.getRandomValues(array);
+      const tempPassword = Array.from(array, dec => dec.toString(16).padStart(2, '0')).join('') + 'Aa1!';
+
+      console.log(`[AdminRegister] Super Admin ${callerUser.email} is creating manager ${email} for company ${targetCompanyId}`);
+
+      // 1. Create user in auth schema via admin API
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: { name }
+      });
+
+      if (authError || !authData.user) {
+        throw authError || new Error('Auth creation failed');
+      }
+
+      const newUserId = authData.user.id;
+
+      // 2. Create manager profile in public.users table
+      const { error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: newUserId,
+          name,
+          email,
+          role: 'manager',
+          company_id: targetCompanyId,
+          created_at: Date.now()
+        });
+
+      if (insertError) {
+        // Rollback auth user creation if profile creation fails
+        await supabaseAdmin.auth.admin.deleteUser(newUserId);
+        throw insertError;
+      }
+
+      // 3. Trigger Supabase reset password email automatically
+      try {
+        const resetRedirect = redirectTo || 'http://localhost:5173/reset-password';
+        const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+          redirectTo: resetRedirect
+        });
+        if (resetError) {
+          console.error('[AdminRegister] Password reset email trigger failed:', resetError.message);
+        }
+      } catch (emailErr) {
+        console.error('[AdminRegister] Failed to send reset email:', emailErr);
+      }
+
+      return new Response(JSON.stringify({ 
+        message: 'Manager created and invitation email triggered successfully',
+        user: { id: newUserId, name, email, role: 'manager' } 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
     } else if (action === 'update') {
       const { userId, email, password, name, role } = body;
       if (!userId) {

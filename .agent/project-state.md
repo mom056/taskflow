@@ -10,6 +10,8 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Admin interface for companies and SaaS platform metrics.
   * Displays MRR (Monthly Recurring Revenue) calculations, interactive employee capacity limits, and deactivation toggles.
   * Inputs for company limits are sanitized via `toEnglishDigits` utility to correctly parse Arabic/Eastern numbers (`١٢٣` -> `123`) on mobile keypads.
+  * Multi-tab structure supporting: **Manage Companies**, **Platform Audit Logs**, and **Stripe & Billing Setup**.
+  * Features a **Stripe Webhook Simulator** allowing administrators to test and trigger plan transitions (Free, Basic, Premium) and subscription billing suspension scenarios.
 * **Manager Dashboard (`src/pages/ManagerDashboard.tsx`):**
   * Admin interface for tasks allocation, team management, interactive GPS visits mapping, and charts.
   * Real-time employee status badge (🟢 Busy on a task / ⚪ Available) computed dynamically using tasks memo.
@@ -41,6 +43,9 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Has `is_active` (boolean) to manage tenant active/suspended status.
   * Updates to `is_active`, `name`, `slug`, `plan`, or `max_employees` are protected at the database level by the `check_company_update` trigger, restricting updates strictly to super_admins.
   * The `get_my_company_id()` function asserts that the company `is_active = true`, causing RLS policies to deny all read/write queries to suspended tenants dynamically.
+  * Stores payment metadata configurations: `stripe_customer_id`, `stripe_subscription_id`, `stripe_public_key`, and `stripe_webhook_secret`.
+* **Table `platform_audit_logs`:**
+  * System-wide audit log mapping administrator actions, details payload (JSONB), company references, IP addresses, and user-agent metadata.
 
 ---
 
@@ -53,6 +58,7 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Phase 5: Future Growth, Multi-language & App Delivery (completed):** Verified Landing Page routing, implemented translation context with dynamic RTL/LTR layout switcher. Expanded with Notification Center, Biometrics Auth, Deep Linking, Offline Maps, and PDF Sharing sheets. Redesigned the Landing Page download section to offer Android APK installation steps, an interactive iOS Safari PWA guide, and an SVG-rendered QR Code. Implemented Apple-compliant "Delete Account" Danger Zone in Profile Settings with double-confirmation, invoking the `delete_own_user` DB RPC before sign-out.
 * **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting and `ErrorBoundary.tsx`. Integrated `@capacitor/haptics` tactile feedback.
 * **Build Verification:** Successfully compiled the entire client bundle with zero errors via `npx tsc --noEmit` and Vite production build (`npm run build`).
+* **Phase 7: SaaS Platform & Super Admin Optimizations (completed):** Created platform audit logs SQL schema with strict RLS policies. Updated `create-user` Edge Function to handle `create_manager_for_company` with JWT validation and secure random password generation, eliminating orphaned companies. Implemented Stripe Billing configuration panel and mock Webhook simulator in the frontend Super Admin dashboard.
 
 ---
 
@@ -75,6 +81,9 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Universal Links / App Links:** Transition custom schemes to verified Universal Links (`https://taskflow.com/...`) by deploying domain association files (`apple-app-site-association` and `assetlinks.json`) to prevent deep link hijacking and ensure standard web fallback routing.
 * **Conflict Resolution Strategy:** Formulate concrete merging paradigms (e.g. Last-Write-Wins or user-facing change conflict dialogue) for the offline synchronizer queue when scale reaches millions of concurrent edits.
 * **Telemetry Control:** Restructure the Sentry initialization parameters in production environments to cap reporting rates (e.g., set `tracesSampleRate: 0.1` or lower) and mitigate bandwidth/infrastructure telemetry bills.
+* **Stripe Live Webhooks Integration:** When deploying to production, point the Stripe Developer dashboard webhooks directly to a secure Supabase Edge Function to handle live billing updates dynamically.
+* **Plan Limits Guard:** Implement database check constraints or backend RLS guards verifying current employee counts against the company's `max_employees` configuration before allowing new registrations.
+* **Encryption of API Secrets:** Encrypt gateway publishable/secret keys in the `companies` table using `pgcrypto` or dynamic environment configuration vaults to prevent plaintext credential exposure in case of DB read anomalies.
 
 ---
 
@@ -95,4 +104,7 @@ This file maintains the current structural and functional state of the TaskFlow 
   * **File:** `supabase/migrations/20260628130000_delete_own_user_rpc.sql`
   * **Description:** Implements the `delete_own_user()` database RPC function with `SECURITY DEFINER` privileges to allow authenticated users to initiate self-deletion of their accounts from `auth.users`, cascading cleanups to their profile and sessions while setting reference keys in task histories to NULL.
   * **Deployment requirement:** Must be run in the Supabase SQL Editor or deployed using the Supabase CLI in the production dashboard prior to testing the Profile Settings "Delete Account" action.
+* **Platform Audit Logs Schema Migration:**
+  * **File:** `supabase/migrations/20260630120000_platform_audit_logs.sql`
+  * **Description:** Provisions the `platform_audit_logs` table, establishes Stripe key placeholder fields on `companies`, and configures row-level security (RLS) allowing only `super_admin` access to the audit trails.
 
