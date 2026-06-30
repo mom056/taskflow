@@ -30,10 +30,10 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#080c14] text-slate-100 selection:bg-blue-600 selection:text-white overflow-x-hidden relative font-sans" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
       {/* Structural Thin Grid Overlay - Clean Blueprint Vibe */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#111827_1px,transparent_1px),linear-gradient(to_bottom,#111827_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none z-0 opacity-80" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#111827_1px,transparent_1px),linear-gradient(to_bottom,#111827_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none z-0 opacity-80" />
       
       {/* Light Source Mesh - Restrained Soft Blue Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-blue-500/[0.04] rounded-full blur-[120px] pointer-events-none z-0" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-blue-500/4 rounded-full blur-[120px] pointer-events-none z-0" />
 
       {/* Header / Navbar */}
       <header className="border-b border-slate-900/60 backdrop-blur-md sticky top-0 z-50 bg-[#080c14]/75">
