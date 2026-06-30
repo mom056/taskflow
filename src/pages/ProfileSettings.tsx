@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowRight, Camera, Save, Lock, UserPlus, Shield, CheckCircle } from 'lucide-react';
@@ -13,6 +13,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile, refreshRole, company, signOut } = useAuth();
   const { logActivity } = useActivityLog();
   const { t, language, changeLanguage } = useTranslation();
@@ -93,6 +94,19 @@ export default function ProfileSettings() {
     if (company?.name) setCompanyName(company.name);
     if (company?.logoUrl) setLogoUrl(company.logoUrl);
   }, [profile, user, company]);
+
+  // Scroll to register employee form if hash is present
+  useEffect(() => {
+    if (location.hash === '#register-employee') {
+      const timer = setTimeout(() => {
+        const element = document.getElementById('register-employee');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [location.hash, profile]);
 
   // Password change fields
   const [newPassword, setNewPassword] = useState('');
@@ -632,7 +646,7 @@ export default function ProfileSettings() {
 
         {/* Manager Section: Add Employee Form */}
         {isManager && (
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-xs space-y-6">
+          <div id="register-employee" className="bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-xs space-y-6">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <span className="w-8 h-8 bg-green-50 text-green-600 rounded-full flex items-center justify-center text-sm font-bold">➕</span>
               <div>

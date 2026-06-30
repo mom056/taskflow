@@ -723,8 +723,15 @@ export default function ManagerDashboard() {
             <div className="p-4 md:p-8 pb-24 md:pb-8">
               {/* Desktop table */}
               <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
-                <div className="px-6 py-5 border-b border-slate-50">
-                  <h2 className="text-base font-bold text-slate-800">{language === 'ar' ? 'قائمة الموظفين' : 'Employees List'}</h2>
+                <div className="px-6 py-5 border-b border-slate-50 flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-800 m-0">{language === 'ar' ? 'قائمة الموظفين' : 'Employees List'}</h2>
+                  <Link
+                    to="/profile#register-employee"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold decoration-none no-underline shadow-xs shadow-blue-200 transition-colors cursor-pointer border-none"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    {language === 'ar' ? 'تسجيل موظف جديد' : 'Register New Employee'}
+                  </Link>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
@@ -803,6 +810,16 @@ export default function ManagerDashboard() {
 
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
+                <div className="flex items-center justify-between mb-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                  <span className="text-sm font-bold text-slate-800">{language === 'ar' ? 'أعضاء الفريق' : 'Team Members'}</span>
+                  <Link
+                    to="/profile#register-employee"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-bold decoration-none no-underline transition-colors cursor-pointer border-none"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    {language === 'ar' ? 'إضافة موظف' : 'Add Employee'}
+                  </Link>
+                </div>
                 {employees.map(emp => {
                   const activeTask = employeeActiveTasks[emp.id];
                   const isSelf = emp.id === user?.id;
