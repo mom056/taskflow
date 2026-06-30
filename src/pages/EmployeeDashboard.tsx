@@ -112,7 +112,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v2.0.8'; // current build version
+        const localVersion = 'v2.0.9'; // current build version
 
         // Record check timestamp
         localStorage.setItem('last_version_check_time', now.toString());
@@ -732,10 +732,12 @@ export default function EmployeeDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <NotificationCenter />
-            <button onClick={() => setTaskFormOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none">
-              <PlusCircle className="w-4 h-4" />{language === 'ar' ? 'مهمة / زيارة جديدة' : 'New Task / Visit'}
-            </button>
+            {activeTab === 'active' && (
+              <button onClick={() => setTaskFormOpen(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none">
+                <PlusCircle className="w-4 h-4" />{language === 'ar' ? 'مهمة / زيارة جديدة' : 'New Task / Visit'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -808,36 +810,40 @@ export default function EmployeeDashboard() {
           <PullToRefresh onRefresh={handleRefresh}>
             <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-6">
 
-              {/* Attendance Card & Quick Operations */}
-              <AttendanceCard
-                company={company}
-                userCoords={userCoords}
-                isLocating={isLocating}
-                getCoordinates={getCoordinates}
-                isOnline={isOnline}
-                addToQueue={addToQueue}
-              />
+              {activeTab === 'active' && (
+                <>
+                  {/* Attendance Card & Quick Operations */}
+                  <AttendanceCard
+                    company={company}
+                    userCoords={userCoords}
+                    isLocating={isLocating}
+                    getCoordinates={getCoordinates}
+                    isOnline={isOnline}
+                    addToQueue={addToQueue}
+                  />
 
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setVisitModalOpen(true)}
-                  className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                    <Briefcase className="w-5 h-5" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => setVisitModalOpen(true)}
+                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                        <Briefcase className="w-5 h-5" />
+                      </div>
+                      <span>{language === 'ar' ? 'تسجيل زيارة ميدانية' : 'Register Field Visit'}</span>
+                    </button>
+                    <button
+                      onClick={() => setLeaveModalOpen(true)}
+                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+                        <CalendarDays className="w-5 h-5" />
+                      </div>
+                      <span>{language === 'ar' ? 'طلب إجازة / إذن مغادرة' : 'Leave / Exit Permit'}</span>
+                    </button>
                   </div>
-                  <span>{language === 'ar' ? 'تسجيل زيارة ميدانية' : 'Register Field Visit'}</span>
-                </button>
-                <button
-                  onClick={() => setLeaveModalOpen(true)}
-                  className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
-                    <CalendarDays className="w-5 h-5" />
-                  </div>
-                  <span>{language === 'ar' ? 'طلب إجازة / إذن مغادرة' : 'Leave / Exit Permit'}</span>
-                </button>
-              </div>
+                </>
+              )}
 
               {/* Segmented Control Bar for active / completed filters inside content */}
               <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-slate-800 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
@@ -869,7 +875,7 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Notification Banner */}
-              {!isCheckingPush && !isSubscribed && permission !== 'granted' && isOnline && (
+              {activeTab === 'active' && !isCheckingPush && !isSubscribed && permission !== 'granted' && isOnline && (
                 <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
                   <div className="flex items-center gap-3">
                     <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">📢</span>
@@ -902,13 +908,15 @@ export default function EmployeeDashboard() {
               )}
 
               {/* Mobile Floating Action Button (FAB) */}
-              <button 
-                onClick={() => setTaskFormOpen(true)}
-                className={`fixed bottom-24 ${language === 'ar' ? 'left-6' : 'right-6'} md:hidden z-30 w-14 h-14 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all border-none cursor-pointer`}
-                title={language === 'ar' ? 'مهمة جديدة' : 'New Task'}
-              >
-                <PlusCircle className="w-6 h-6" />
-              </button>
+              {activeTab === 'active' && (
+                <button 
+                  onClick={() => setTaskFormOpen(true)}
+                  className={`fixed bottom-24 ${language === 'ar' ? 'left-6' : 'right-6'} md:hidden z-30 w-14 h-14 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all border-none cursor-pointer`}
+                  title={language === 'ar' ? 'مهمة جديدة' : 'New Task'}
+                >
+                  <PlusCircle className="w-6 h-6" />
+                </button>
+              )}
 
             {/* Interactive Workday Path */}
             {activeTab === 'active' && workdayTasks.length > 0 && (
