@@ -16,6 +16,11 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Admin interface for tasks allocation, team management, interactive GPS visits mapping, and charts.
   * Real-time employee status badge (🟢 Busy on a task / ⚪ Available) computed dynamically using tasks memo.
   * Employee modification/deletion dialogs linked to `create-user` Edge Function.
+  * Includes a "Register New Employee" quick action button in both desktop and mobile views that routes the manager to the Profile Settings page.
+* **Profile Settings (`src/pages/ProfileSettings.tsx`):**
+  * Manages personal settings, company logo uploads, application language, theme switches, and biometric login setups.
+  * Includes the team member registration form for managers.
+  * Enhanced with reactive hash-scrolling (`#register-employee`) using React Router's `useLocation` to instantly scroll and focus the onboarding form into viewport when navigated from the dashboard.
 * **Employee Dashboard (`src/pages/EmployeeDashboard.tsx`):**
   * Renders the interactive **Visual Workday Path** at the top of active tasks.
   * Uses a dynamic inline **Segmented Control Bar** to switch between active and completed tasks with live counters (instead of the old 4 bulky KPI grid cards).
