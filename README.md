@@ -8,7 +8,7 @@
   </p>
   
   <p align="center">
-    <img src="https://img.shields.io/badge/Version-1.3.0-blue.svg?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/Version-1.3.3-blue.svg?style=flat-square" alt="Version" />
     <img src="https://img.shields.io/badge/Platform-PWA%20%7C%20Android%20%7C%20iOS-brightgreen.svg?style=flat-square" alt="Platforms" />
     <img src="https://img.shields.io/badge/Backend-Supabase%20%7C%20Deno-emerald.svg?style=flat-square" alt="Backend" />
     <img src="https://img.shields.io/badge/Security-Production--Grade-success.svg?style=flat-square" alt="Security" />
@@ -61,7 +61,7 @@ graph TD
 
 ### المتطلبات المسبقة:
 * تثبيت **Node.js** (الإصدار 18 أو أحدث)
-* تثبيت **Supabase CLI** (اختياري لتحديث الدوال السحابية محلياً)
+* تثبيت **Supabase CLI** (مستحسن للتطوير المحلي)
 
 ### 1. تثبيت الحزم والمكتبات:
 ```bash
@@ -76,15 +76,30 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_SENTRY_DSN=your_sentry_dsn_url
 ```
 
-### 3. تشغيل التطبيق في وضع التطوير:
+### 3. تشغيل التطبيق في وضع التطوير للويب:
 ```bash
 npm run dev
 ```
 
-### 4. فحص لغة TypeScript وتجميع المشروع:
+---
+
+## 📱 تشغيل وبناء تطبيق الجوال (Native Mobile Build)
+
+يدمج المشروع إطار عمل **Capacitor** لبناء حزم تطبيقات الهواتف الذكية للأندرويد و iOS باستخدام نفس الكود البرمجي:
+
+### 1. بناء ملفات الويب ومزامنتها مع أطر عمل الهواتف:
 ```bash
-npx tsc --noEmit
-npm run build
+npm run cap:build
+```
+
+### 2. تشغيل وبناء التطبيق على نظام أندرويد (Android Studio):
+```bash
+npm run cap:android
+```
+
+### 3. تشغيل وبناء التطبيق على نظام آبل (Xcode):
+```bash
+npm run cap:ios
 ```
 
 ---
@@ -94,31 +109,25 @@ npm run build
 ### 1. نشر الدوال السحابية (Deploy Edge Functions):
 تأكد من تسجيل الدخول إلى Supabase CLI ثم قم بنشر الدوال اللازمة:
 ```bash
-npx supabase functions deploy create-user --no-verify-jwt
-npx supabase functions deploy send-push --no-verify-jwt
+npm run deploy:functions
 ```
 
 ### 2. تهيئة المتغيرات السرية (Supabase Secrets):
 تأكد من ضبط المتغيرات الأمنية الضرورية لعمل الدوال السحابية:
 ```bash
-npx supabase secrets set WEBHOOK_SECRET=your_strong_webhook_secret
-npx supabase secrets set VAPID_PUBLIC_KEY=your_vapid_public_key
-npx supabase secrets set VAPID_PRIVATE_KEY=your_vapid_private_key
-npx supabase secrets set FIREBASE_SERVICE_ACCOUNT=your_firebase_json_content
-```
-
-### 3. بناء تطبيق الهاتف لمتاجر التطبيقات (Capacitor Sync):
-لتحديث أصول الويب ومزامنتها مع تطبيقات الهواتف النيتيف:
-```bash
-npx cap sync
+npx supabase secrets set WEBHOOK_SECRET=your_strong_webhook_secret --project-ref bzsmwmkgmropuadpkcku
+npx supabase secrets set VAPID_PUBLIC_KEY=your_vapid_public_key --project-ref bzsmwmkgmropuadpkcku
+npx supabase secrets set VAPID_PRIVATE_KEY=your_vapid_private_key --project-ref bzsmwmkgmropuadpkcku
+npx supabase secrets set FIREBASE_SERVICE_ACCOUNT=your_firebase_json_content --project-ref bzsmwmkgmropuadpkcku
 ```
 
 ---
 
 ## 🛠️ تفاصيل البناء والتوافق (Version Info)
 
-* **React:** 18.x
+* **React:** 19.x
 * **Build Tool:** Vite 6.x
 * **CSS System:** Tailwind CSS v4
 * **Native Wrappers:** Capacitor 8.x
 * **PWA Engine:** Vite PWA Plugin
+* **Database & Auth:** Supabase 2.x
