@@ -633,10 +633,10 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('attendance')}
-                  className="bg-linear-to-br from-blue-50 to-blue-100/60 p-5 rounded-3xl border border-blue-100/70 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
+                  className="bg-linear-to-br from-blue-50 to-blue-100/60 dark:from-slate-800/40 dark:to-slate-900/40 p-5 rounded-3xl border border-blue-100/70 dark:border-slate-700/60 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
                   dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
-                  <span className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-blue-200">⏰</span>
+                  <span className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-blue-200 dark:shadow-none">⏰</span>
                   <h3 className={`font-bold text-slate-800 text-sm mt-3 mb-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'سجل الحضور والانصراف' : 'Attendance Logs'}</h3>
                   <p className={`text-[10px] text-slate-400 m-0 leading-relaxed ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'متابعة أوقات دخول وخروج الموظفين والمسافات الجغرافية ولحظات التأخير' : 'Monitor check-in/out timings, spatial constraints, and latency logs'}</p>
                 </button>
@@ -644,10 +644,10 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('leaves')}
-                  className="bg-linear-to-br from-indigo-50 to-indigo-100/60 p-5 rounded-3xl border border-indigo-100/70 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
+                  className="bg-linear-to-br from-indigo-50 to-indigo-100/60 dark:from-slate-800/40 dark:to-slate-900/40 p-5 rounded-3xl border border-indigo-100/70 dark:border-slate-700/60 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
                   dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
-                  <span className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-indigo-200">📄</span>
+                  <span className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-indigo-200 dark:shadow-none">📄</span>
                   <h3 className={`font-bold text-slate-800 text-sm mt-3 mb-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'طلبات المغادرة والإجازات' : 'Leave & Excuse Requests'}</h3>
                   <p className={`text-[10px] text-slate-400 m-0 leading-relaxed ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'مراجعة وتدقيق وقبول أو رفض طلبات مغادرات الموظفين والإجازات المرضية والسنوية' : 'Review, approve, or reject employee excuse, sickness, or annual leaves'}</p>
                 </button>
