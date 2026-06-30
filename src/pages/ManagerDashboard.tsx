@@ -786,7 +786,22 @@ export default function ManagerDashboard() {
                         const isSelf = emp.id === user?.id;
                         return (
                            <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 border-b border-slate-50 text-sm font-semibold text-slate-900">{emp.name}</td>
+                            <td className="p-4 border-b border-slate-50 text-sm font-semibold text-slate-900">
+                              <div className="flex items-center gap-3">
+                                {emp.avatarUrl ? (
+                                  <img
+                                    src={emp.avatarUrl}
+                                    alt={emp.name}
+                                    className="w-8 h-8 rounded-full object-cover border border-slate-100 shadow-xs shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 font-bold text-xs shrink-0">
+                                    {emp.name?.[0]?.toUpperCase() || '؟'}
+                                  </div>
+                                )}
+                                <span>{emp.name}</span>
+                              </div>
+                            </td>
                             <td className="p-4 border-b border-slate-50 text-sm text-slate-500">{emp.email}</td>
                             <td className="p-4 border-b border-slate-50 text-sm">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -861,9 +876,17 @@ export default function ManagerDashboard() {
                   return (
                     <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-xs p-4 flex flex-col gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-linear-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
-                          {emp.name?.[0]?.toUpperCase() || '؟'}
-                        </div>
+                        {emp.avatarUrl ? (
+                          <img
+                            src={emp.avatarUrl}
+                            alt={emp.name}
+                            className="w-10 h-10 rounded-full object-cover border border-slate-100 dark:border-slate-800 shadow-xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-linear-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                            {emp.name?.[0]?.toUpperCase() || '؟'}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-slate-900 text-sm">{emp.name}</div>
                           <div className="text-xs text-slate-400 mt-0.5 truncate">{emp.email}</div>
