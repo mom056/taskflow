@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { LayoutDashboard, CheckSquare, MapPin, Users, BarChart3, History, Clock, FileText, Menu, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { LayoutDashboard, CheckSquare, MapPin, Users, BarChart3, History, Clock, FileText, Menu, X, User } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 
 interface MobileBottomNavProps {
@@ -35,6 +36,7 @@ export default function MobileBottomNav({ activeTab, onChange }: MobileBottomNav
       case 'leaves': return language === 'ar' ? 'طلبات الإجازات' : 'Leave Requests';
       case 'activity': return language === 'ar' ? 'سجل العمليات' : 'Activity Logs';
       case 'analytics': return language === 'ar' ? 'التقارير' : 'Reports';
+      case 'profile': return language === 'ar' ? 'الملف الشخصي' : 'Profile Settings';
       case 'more': return language === 'ar' ? 'المزيد' : 'More';
       default: return '';
     }
@@ -105,7 +107,7 @@ export default function MobileBottomNav({ activeTab, onChange }: MobileBottomNav
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4" />
             <h4 className="text-xs font-bold text-slate-400 mb-3 px-1 text-start">{language === 'ar' ? 'أقسام إضافية' : 'More Sections'}</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               {moreItems.map(item => (
                 <button
                   key={item.id}
@@ -130,6 +132,16 @@ export default function MobileBottomNav({ activeTab, onChange }: MobileBottomNav
                 </button>
               ))}
             </div>
+
+            {/* Profile Settings Link (Separate Router Route) */}
+            <Link
+              to="/profile"
+              onClick={() => setIsMenuOpen(false)}
+              className="flex items-center justify-center gap-2 p-3.5 bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-2xl text-slate-700 font-bold text-xs transition-all cursor-pointer text-center decoration-none no-underline"
+            >
+              <User className="w-4.5 h-4.5 text-slate-600" />
+              <span>{getLabel('profile')}</span>
+            </Link>
           </div>
         </div>
       )}
