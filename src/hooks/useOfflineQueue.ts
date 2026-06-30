@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Preferences } from '@capacitor/preferences';
@@ -17,6 +17,7 @@ const STORAGE_KEY = 'taskflow_offline_queue';
 export function useOfflineQueue(onSyncSuccess?: () => void) {
   const [isOnline, setIsOnline] = useState(true);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const wasConnectedRef = useRef<boolean | null>(null);
 
   // Load queue from storage on init
   useEffect(() => {
@@ -149,33 +150,48 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
       if (Capacitor.isNativePlatform()) {
         try {
           const status = await Network.getStatus();
-          if (isMounted) setIsOnline(status.connected);
+          if (isMounted) {
+            setIsOnline(status.connected);
+            wasConnectedRef.current = status.connected;
+          }
 
           networkListener = await Network.addListener('networkStatusChange', (status) => {
             if (!isMounted) return;
-            setIsOnline(status.connected);
-            if (status.connected) {
-              toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
-              syncQueue();
-            } else {
-              toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
+            if (wasConnectedRef.current !== status.connected) {
+              wasConnectedRef.current = status.connected;
+              setIsOnline(status.connected);
+              if (status.connected) {
+                toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
+                syncQueue();
+              } else {
+                toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
+              }
             }
           });
         } catch (e) {
           console.warn('[OfflineQueue] Native network plugin failed, using fallback', e);
         }
+      } else {
+        // Fallback for Web browser init
+        if (isMounted) {
+          const online = navigator.onLine;
+          setIsOnline(online);
+          wasConnectedRef.current = online;
+        }
       }
 
       // Fallback for Web browser
       const handleOnline = () => {
-        if (isMounted) {
+        if (isMounted && wasConnectedRef.current !== true) {
+          wasConnectedRef.current = true;
           setIsOnline(true);
           toast.success('تم استعادة الاتصال بالإنترنت! جاري المزامنة...');
           syncQueue();
         }
       };
       const handleOffline = () => {
-        if (isMounted) {
+        if (isMounted && wasConnectedRef.current !== false) {
+          wasConnectedRef.current = false;
           setIsOnline(false);
           toast.error('أنت تعمل الآن دون اتصال بالإنترنت. سيتم حفظ التعديلات محلياً.');
         }
