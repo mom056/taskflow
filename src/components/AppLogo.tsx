@@ -39,7 +39,7 @@ export default function AppLogo({
       <AppLogoIcon size={size} />
       {showText && (
         <span 
-          className={`text-xl font-black tracking-tight bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent ${textColorClass}`}
+          className={`text-xl font-black tracking-tight bg-linear-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent ${textColorClass}`}
           style={{ fontFamily: 'Outfit, Inter, system-ui, sans-serif' }}
         >
           {t.common.appName}

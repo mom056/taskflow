@@ -32,7 +32,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-600 selection:text-white overflow-x-hidden relative font-sans" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
       {/* Visual Background Accent Grids */}
-      <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-25 pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1.2px,transparent_1.2px)] bg-size-[24px_24px] opacity-25 pointer-events-none z-0" />
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[130px] pointer-events-none z-0" />
       <div className="absolute bottom-1/4 left-1/3 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none z-0" />
@@ -77,11 +77,11 @@ export default function LandingPage() {
           <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-tight max-w-4xl mx-auto px-2">
             {language === 'ar' ? (
               <>
-                تابع فريقك الميداني وتأكد من <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">إنجاز المهام بدقة</span>
+                تابع فريقك الميداني وتأكد من <span className="bg-linear-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">إنجاز المهام بدقة</span>
               </>
             ) : (
               <>
-                Track Your Field Team & Ensure <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">Accurate Completion</span>
+                Track Your Field Team & Ensure <span className="bg-linear-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">Accurate Completion</span>
               </>
             )}
           </h1>
@@ -142,7 +142,7 @@ export default function LandingPage() {
           {/* Interactive Simulation Frame */}
           <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl backdrop-blur-xs relative overflow-hidden">
             {/* Top glass reflection overlay */}
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-slate-700 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-slate-700 to-transparent" />
 
             {activeMockupTab === 'manager' ? (
               /* MANAGER DESKTOP SIMULATOR */
@@ -656,7 +656,7 @@ export default function LandingPage() {
             <div className="col-span-12 md:col-span-5 hidden md:flex flex-col items-center justify-center space-y-4">
               <div className="bg-slate-950 border border-slate-900 rounded-3xl p-6 shadow-xl flex flex-col items-center space-y-4 relative overflow-hidden w-64">
                 {/* Visual grid overlay */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:14px_24px] opacity-10 pointer-events-none" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-size-[14px_24px] opacity-10 pointer-events-none" />
                 
                 {/* Real Dynamic QR Code image wrapper */}
                 <div className="bg-white p-3.5 rounded-2xl shadow-inner relative z-10 flex items-center justify-center">
@@ -688,7 +688,7 @@ export default function LandingPage() {
 
       {/* CTA Section */}
       <section className="py-24 px-6 relative overflow-hidden">
-        <div className="max-w-4xl mx-auto bg-gradient-to-br from-blue-600 to-indigo-700 rounded-4xl p-8 md:p-14 text-center space-y-8 relative shadow-2xl shadow-blue-900/30">
+        <div className="max-w-4xl mx-auto bg-linear-to-br from-blue-600 to-indigo-700 rounded-4xl p-8 md:p-14 text-center space-y-8 relative shadow-2xl shadow-blue-900/30">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
           <h2 className="text-3xl md:text-4xl font-extrabold text-white">
             {t.landing.ctaTitle}
