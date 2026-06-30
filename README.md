@@ -1,7 +1,6 @@
 # 🚀 TaskFlow — Field Task Management System
 
 <div align="center">
-  <img width="1200" height="475" alt="TaskFlow Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
   
   <p align="center">
     <strong>تطبيق ذكي متكامل للهواتف والويب لإدارة المهام الميدانية والموظفين في الوقت الفعلي.</strong>
