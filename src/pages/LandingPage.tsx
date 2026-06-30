@@ -39,25 +39,26 @@ export default function LandingPage() {
 
       {/* Header / Navbar */}
       <header className="border-b border-slate-900/80 backdrop-blur-lg sticky top-0 z-50 bg-slate-950/80">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <AppLogo size={34} theme="dark" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+          <AppLogo size={30} theme="dark" />
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button 
               onClick={() => changeLanguage(language === 'ar' ? 'en' : 'ar')}
-              className="text-xs font-bold bg-slate-900/90 hover:bg-slate-800 border border-slate-800/80 text-slate-300 px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+              className="text-[10px] sm:text-xs font-bold bg-slate-900/90 hover:bg-slate-800 border border-slate-800/80 text-slate-300 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition-all cursor-pointer"
             >
-              {language === 'ar' ? 'English' : 'العربية'}
+              <span className="sm:inline hidden">{language === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="inline sm:hidden">{language === 'ar' ? 'EN' : 'AR'}</span>
             </button>
             <button 
               onClick={() => handleGoToAuth(true)}
-              className="text-sm font-semibold text-slate-300 hover:text-white transition-colors px-4 py-2 cursor-pointer bg-transparent border-none"
+              className="text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors px-2 sm:px-4 py-2 cursor-pointer bg-transparent border-none"
             >
               {t.landing.login}
             </button>
             <button 
               onClick={() => handleGoToAuth(false)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-blue-600/20 hover:-translate-y-0.5 cursor-pointer border-none"
+              className="hidden sm:block bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-blue-600/20 hover:-translate-y-0.5 cursor-pointer border-none"
             >
               {t.landing.startFree}
             </button>
@@ -73,7 +74,7 @@ export default function LandingPage() {
             <span>{t.landing.subtitle}</span>
           </div>
           
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tight leading-tight max-w-4xl mx-auto">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-tight max-w-4xl mx-auto px-2">
             {language === 'ar' ? (
               <>
                 تابع فريقك الميداني وتأكد من <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">إنجاز المهام بدقة</span>
@@ -112,28 +113,28 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto">
           {/* Mockup Tabs */}
           <div className="flex justify-center mb-6">
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-1.5 flex gap-2">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-1 flex sm:gap-2 max-w-full overflow-x-auto">
               <button
                 onClick={() => setActiveMockupTab('manager')}
-                className={`px-5 py-3 rounded-xl text-xs md:text-sm font-bold transition-all border-none cursor-pointer flex items-center gap-2 ${
+                className={`px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-[10px] sm:text-xs md:text-sm font-bold transition-all border-none cursor-pointer flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
                   activeMockupTab === 'manager'
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-slate-200 bg-transparent'
                 }`}
               >
-                <Eye className="w-4 h-4" />
-                <span>{language === 'ar' ? 'لوحة تحكم المدير (الويب)' : 'Manager Dashboard (Web)'}</span>
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>{language === 'ar' ? 'لوحة تحكم المدير' : 'Manager Dashboard'}</span>
               </button>
               <button
                 onClick={() => setActiveMockupTab('employee')}
-                className={`px-5 py-3 rounded-xl text-xs md:text-sm font-bold transition-all border-none cursor-pointer flex items-center gap-2 ${
+                className={`px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-[10px] sm:text-xs md:text-sm font-bold transition-all border-none cursor-pointer flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
                   activeMockupTab === 'employee'
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-slate-200 bg-transparent'
                 }`}
               >
-                <Smartphone className="w-4 h-4" />
-                <span>{language === 'ar' ? 'تطبيق الموظف (الجوال)' : 'Employee App (Mobile)'}</span>
+                <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>{language === 'ar' ? 'تطبيق الموظف' : 'Employee App'}</span>
               </button>
             </div>
           </div>
@@ -183,25 +184,25 @@ export default function LandingPage() {
                   {/* Dashboard Content */}
                   <div className="col-span-12 sm:col-span-9 space-y-4">
                     {/* Live stats */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-3">
-                        <span className="text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'الزيارات النشطة' : 'Active Visits'}</span>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-lg font-black text-white">12</span>
-                          <span className="text-[9px] text-emerald-500 font-bold">🟢 نشط</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-2.5 sm:p-3">
+                        <span className="text-[9px] sm:text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'الزيارات النشطة' : 'Active Visits'}</span>
+                        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1">
+                          <span className="text-sm sm:text-lg font-black text-white">12</span>
+                          <span className="text-[8px] sm:text-[9px] text-emerald-500 font-bold">🟢 نشط</span>
                         </div>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-3">
-                        <span className="text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'معدل الإنجاز' : 'Completion Rate'}</span>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-lg font-black text-blue-400">96.8%</span>
+                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-2.5 sm:p-3">
+                        <span className="text-[9px] sm:text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'معدل الإنجاز' : 'Completion Rate'}</span>
+                        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1">
+                          <span className="text-sm sm:text-lg font-black text-blue-400">96.8%</span>
                         </div>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-3">
-                        <span className="text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'تغطية الـ GPS' : 'GPS Tracking'}</span>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-lg font-black text-white">100%</span>
-                          <span className="text-[9px] text-blue-400 font-bold">موثق</span>
+                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-2.5 sm:p-3">
+                        <span className="text-[9px] sm:text-[10px] text-slate-500 block font-semibold">{language === 'ar' ? 'تغطية الـ GPS' : 'GPS Tracking'}</span>
+                        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1">
+                          <span className="text-sm sm:text-lg font-black text-white">100%</span>
+                          <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold">موثق</span>
                         </div>
                       </div>
                     </div>
@@ -518,7 +519,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-12 gap-8 items-center bg-slate-900/40 border border-slate-900 rounded-4xl p-6 md:p-10 backdrop-blur-xs">
             {/* Left: Setup Guidelines & Platform Tabs */}
-            <div className="md:col-span-7 space-y-6">
+            <div className="col-span-12 md:col-span-7 space-y-6">
               {/* Tab Selector */}
               <div className="flex border border-slate-800 rounded-xl p-1 bg-slate-950 w-fit select-none">
                 <button
@@ -650,9 +651,9 @@ export default function LandingPage() {
                 </div>
               )}
             </div>
-
+ 
             {/* Right: Real Scanable QR Code Visualizer card */}
-            <div className="md:col-span-5 flex flex-col items-center justify-center space-y-4">
+            <div className="col-span-12 md:col-span-5 hidden md:flex flex-col items-center justify-center space-y-4">
               <div className="bg-slate-950 border border-slate-900 rounded-3xl p-6 shadow-xl flex flex-col items-center space-y-4 relative overflow-hidden w-64">
                 {/* Visual grid overlay */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:14px_24px] opacity-10 pointer-events-none" />
