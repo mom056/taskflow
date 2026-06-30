@@ -93,6 +93,7 @@ This file maintains the current structural and functional state of the TaskFlow 
 
 ## 5. Future Architectural Directions
 
+* **Private Repository APK Distribution Strategy:** In the event the GitHub repository is set to Private, default unauthenticated public access to GitHub releases will be blocked (causing download failures for the APK from the Landing Page). The recommended architectural solution is configuring the GitHub Actions build workflow to automatically upload the compiled `app-release.apk` binary to a Public Supabase Storage bucket (`app-distribution`), and updating the Landing Page download anchor href to point to the Supabase public CDN URL.
 * **High-Fidelity PDF/Report Generation:** Migrate from client-side `jsPDF` custom font reverse character rendering to either a Backend PDF Generation service (e.g. Supabase Edge Function utilizing Puppeteer/Typst) or a native Capacitor print layout engine. This resolves browser-based Arabic RTL and letter-ligation (shaping) limitations natively.
 * **Universal Links / App Links:** Transition custom schemes to verified Universal Links (`https://taskflow.com/...`) by deploying domain association files (`apple-app-site-association` and `assetlinks.json`) to prevent deep link hijacking and ensure standard web fallback routing.
 * **Conflict Resolution Strategy:** Formulate concrete merging paradigms (e.g. Last-Write-Wins or user-facing change conflict dialogue) for the offline synchronizer queue when scale reaches millions of concurrent edits.
