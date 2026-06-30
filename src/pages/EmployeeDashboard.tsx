@@ -21,6 +21,10 @@ import NotificationCenter from '../components/NotificationCenter';
 import AppLogo from '../components/AppLogo';
 import AppLoader from '../components/AppLoader';
 import PermissionGuideModal from '../components/PermissionGuideModal';
+import AttendanceCard from '../components/AttendanceCard';
+import LeaveRequestModal from '../components/LeaveRequestModal';
+import VisitModal from '../components/VisitModal';
+import { Briefcase, CalendarDays } from 'lucide-react';
 
 // Helper function to calculate distance using the Haversine formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -174,6 +178,10 @@ export default function EmployeeDashboard() {
   const [isTaskFormOpen, setTaskFormOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', description: '', location: '', dueDate: '' });
+
+  // Attendance & Leaves & Visits states
+  const [isLeaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [isVisitModalOpen, setVisitModalOpen] = useState(false);
 
   // Notes & image modal
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -800,6 +808,33 @@ export default function EmployeeDashboard() {
           <PullToRefresh onRefresh={handleRefresh}>
             <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 md:pb-8 space-y-6">
 
+              {/* Attendance Card & Quick Operations */}
+              <AttendanceCard
+                company={company}
+                userCoords={userCoords}
+                isLocating={isLocating}
+                getCoordinates={getCoordinates}
+                isOnline={isOnline}
+                addToQueue={addToQueue}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setVisitModalOpen(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Briefcase className="w-4 h-4 text-blue-600" />
+                  <span>تسجيل زيارة ميدانية</span>
+                </button>
+                <button
+                  onClick={() => setLeaveModalOpen(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-colors cursor-pointer"
+                >
+                  <CalendarDays className="w-4 h-4 text-purple-600" />
+                  <span>طلب إجازة / إذن مغادرة</span>
+                </button>
+              </div>
+
             {/* Segmented Control Bar for active / completed filters inside content */}
             <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
               <div className="flex border border-slate-200 dark:border-slate-700/60 rounded-xl p-1 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto shrink-0 select-none w-full sm:w-auto">
@@ -1310,6 +1345,24 @@ export default function EmployeeDashboard() {
         onClose={() => setIsPermissionGuideOpen(false)}
         type={permissionGuideType}
         language={language}
+      />
+
+      {/* ── LEAVE & VISIT MODALS ── */}
+      <LeaveRequestModal
+        isOpen={isLeaveModalOpen}
+        onClose={() => setLeaveModalOpen(false)}
+        isOnline={isOnline}
+        addToQueue={addToQueue}
+      />
+
+      <VisitModal
+        isOpen={isVisitModalOpen}
+        onClose={() => setVisitModalOpen(false)}
+        userCoords={userCoords}
+        isLocating={isLocating}
+        getCoordinates={getCoordinates}
+        isOnline={isOnline}
+        addToQueue={addToQueue}
       />
 
       {/* ── IN-APP UPDATE CHECKER ALERT MODAL ── */}

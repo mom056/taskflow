@@ -339,3 +339,325 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 4. **Account Deletion:** Create a temporary test account, navigate to Profile Settings, click "Delete Account", confirm the action, and verify the user is logged out and the user record is deleted in Supabase.
 5. **App Download Link:** Test clicking the download APK button on the Landing Page and ensure it routes to the correct GitHub release URL.
 6. **In-App Update:** Mock a lower local version value in code and verify the app displays the "Update Available" modal with the correct tag name from GitHub.
+
+# خطة تنفيذية شاملة: نظام الحضور والانصراف والزيارات الميدانية (v2.0.0)
+
+## الهدف العام
+
+تحويل TaskFlow من "نظام إدارة مهام" إلى **"منصة شاملة لإدارة الموارد البشرية والعمل الميداني" (HR & Field Force Management SaaS)** عبر إضافة:
+
+1. نظام الحضور والانصراف المقيد جغرافياً
+2. نظام الزيارات الميدانية المستقل
+3. نظام طلبات الأذونات والإجازات
+4. لوحة تحليلات ساعات العمل والإنتاجية
+5. تحليلات المواقع الجغرافية الأكثر نشاطاً
+
+---
+
+## المرحلة 1: قاعدة البيانات والجداول الجديدة
+
+### 1.1 تعديل جدول الشركات `companies`
+
+إضافة حقول إحداثيات المقر وإعدادات الدوام:
+
+```sql
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS hq_latitude DECIMAL(10, 8);
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS hq_longitude DECIMAL(11, 8);
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS hq_radius_meters INT DEFAULT 200;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS work_start_time TEXT DEFAULT '08:00';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS work_end_time TEXT DEFAULT '17:00';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS work_days TEXT[] DEFAULT ARRAY['Sun','Mon','Tue','Wed','Thu'];
+```
+
+**التأثير:** لا يوجد تأثير سلبي — إضافة أعمدة اختيارية فقط. الكود الحالي لا يقرأ هذه الحقول.
+
+### 1.2 جدول الحضور والانصراف `attendance` [جديد]
+
+```sql
+CREATE TABLE IF NOT EXISTS public.attendance (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  check_in_time BIGINT NOT NULL,
+  check_in_lat DECIMAL(10, 8),
+  check_in_lng DECIMAL(11, 8),
+  check_in_type TEXT DEFAULT 'office', -- 'office' | 'field' | 'remote'
+  check_out_time BIGINT,
+  check_out_lat DECIMAL(10, 8),
+  check_out_lng DECIMAL(11, 8),
+  total_hours DECIMAL(5, 2),
+  notes TEXT,
+  is_late BOOLEAN DEFAULT false,
+  created_at BIGINT NOT NULL
+);
+```
+
+### 1.3 توسيع جدول الزيارات `visits`
+
+```sql
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8);
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8);
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS visit_type TEXT DEFAULT 'client_visit';
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS duration_minutes INT;
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS check_in_time BIGINT;
+ALTER TABLE public.visits ADD COLUMN IF NOT EXISTS check_out_time BIGINT;
+```
+
+**التأثير:** الكود الحالي في `useVisits.ts` يقرأ `SELECT *` — الحقول الجديدة ستكون `null` للسجلات القديمة ولن تسبب أي خطأ.
+
+### 1.4 جدول طلبات الأذونات والإجازات `leave_requests` [جديد]
+
+```sql
+CREATE TABLE IF NOT EXISTS public.leave_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL DEFAULT 'excuse', -- 'excuse' | 'sick' | 'annual' | 'emergency'
+  reason TEXT NOT NULL,
+  start_date BIGINT NOT NULL,
+  end_date BIGINT,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'approved' | 'rejected'
+  reviewed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  reviewed_at BIGINT,
+  review_note TEXT,
+  created_at BIGINT NOT NULL
+);
+```
+
+### 1.5 سياسات RLS للجداول الجديدة
+
+- **attendance**: الموظف يقرأ سجلاته فقط ويُدرج لنفسه فقط. المدير يقرأ كل سجلات شركته.
+- **leave_requests**: الموظف يُدرج ويقرأ طلباته. المدير يقرأ ويُحدّث (قبول/رفض) طلبات شركته.
+- **visits**: تحديث السياسة الحالية لدعم الحقول الجديدة.
+
+### 1.6 Triggers أمنية
+
+- **attendance_insert_trigger**: يمنع الموظف من تسجيل حضور باسم موظف آخر (`employee_id = auth.uid()`).
+- **attendance_checkout_trigger**: يحسب `total_hours` و `is_late` تلقائياً عند تسجيل الانصراف.
+
+---
+
+## المرحلة 2: أنواع TypeScript والـ Hooks الجديدة
+
+### 2.1 تحديث `src/types.ts`
+
+إضافة الواجهات (Interfaces) التالية:
+
+- `Attendance` — لنظام الحضور والانصراف
+- `LeaveRequest` — لطلبات الأذونات والإجازات
+- توسيع واجهة `Visit` بالحقول الجديدة
+- توسيع واجهة `Company` بحقول المقر وإعدادات الدوام
+
+### 2.2 Hooks جديدة
+
+| الملف                      | الوظيفة                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `useAttendance.ts`         | جلب/إدراج سجلات الحضور والانصراف، حساب حالة اليوم                                  |
+| `useLeaveRequests.ts`      | جلب/إدراج/تحديث طلبات الأذونات                                                     |
+| تحديث `useVisits.ts`       | دعم الحقول الجديدة (الإحداثيات، اسم العميل، الصور)                                 |
+| تحديث `useOfflineQueue.ts` | إضافة أنواع `check_in`, `check_out`, `create_visit` للمزامنة أثناء انقطاع الإنترنت |
+
+**التأثير:** لا يوجد تأثير على الكود الحالي — كل الإضافات هي ملفات جديدة أو توسعات متوافقة.
+
+---
+
+## المرحلة 3: واجهة الموظف (Employee Dashboard)
+
+### 3.1 بطاقة الحضور اليومي (أعلى الشاشة)
+
+بطاقة عريضة مميزة بألوان متدرجة تعرض:
+
+- **قبل التحضير:** زر "تسجيل حضور" كبير مع أيقونة ⏰ وتحقق GPS تلقائي
+- **أثناء الدوام:** عداد زمني حي (Live Timer) يعرض ساعات العمل المنقضية + زر "تسجيل انصراف"
+- **بعد الانصراف:** ملخص اليوم (وقت الحضور، الانصراف، إجمالي الساعات)
+
+### 3.2 التحقق الجغرافي (Geofenced Check-in)
+
+- عند الضغط على "تسجيل حضور"، يتم جلب إحداثيات الموظف.
+- مقارنة المسافة بـ `hq_latitude/hq_longitude` + `hq_radius_meters` من جدول الشركة.
+- إذا كان داخل النطاق ← تسجيل كـ `office`.
+- إذا كان خارج النطاق ← تسجيل كـ `field` مع تنبيه.
+
+### 3.3 تبويب الزيارات الميدانية المستقل
+
+إضافة تبويب ثالث في الـ Segmented Control: **"المهام" | "الزيارات" | "المكتملة"**
+
+- تبويب "الزيارات" يعرض زر عائم (FAB) لإضافة زيارة جديدة.
+- نموذج الزيارة: اسم العميل/الجهة، الملاحظات، التقاط صورة إثبات، تسجيل الإحداثيات تلقائياً.
+
+### 3.4 طلب إذن/إجازة سريعة
+
+زر صغير في بطاقة الحضور اليومي: **"طلب إذن"**
+
+- نموذج سريع: نوع الطلب (إذن ساعات / مرضي / سنوي / طارئ)، السبب، التاريخ.
+- يُرسل إشعار فوري للمدير.
+
+**التأثير:** تعديل `EmployeeDashboard.tsx` (1351 سطراً). سنضيف المكونات كـ Components منفصلة ونستوردها، مما يقلل التأثير على الكود الحالي.
+
+---
+
+## المرحلة 4: واجهة المدير (Manager Dashboard)
+
+### 4.1 تبويب "الحضور والانصراف"
+
+إضافة تبويب جديد في شريط التنقل: **"الحضور"**
+
+- جدول يومي يعرض: اسم الموظف، وقت الحضور، وقت الانصراف، إجمالي الساعات، حالة التأخير.
+- فلتر حسب التاريخ (يوم/أسبوع/شهر).
+- مؤشرات ملونة: 🟢 حاضر في الوقت | 🟡 متأخر | 🔴 غائب | 🔵 في إذن.
+
+### 4.2 تبويب "طلبات الأذونات"
+
+- قائمة بطلبات الموظفين المعلقة مع أزرار **قبول ✅ / رفض ❌**.
+- إشعار فوري للموظف عند الرد على طلبه.
+
+### 4.3 تبويب "الزيارات الميدانية" (محسّن)
+
+تحديث التبويب الموجود حالياً لعرض:
+
+- اسم العميل/الجهة المُزارة.
+- الإحداثيات على الخريطة.
+- صور الإثبات.
+- مدة الزيارة.
+
+### 4.4 إعدادات مقر الشركة والدوام
+
+في صفحة `ProfileSettings.tsx` (قسم إعدادات الشركة):
+
+- حقول إحداثيات المقر مع زر "استخدم موقعي الحالي".
+- حقل نطاق السماح بالأمتار (Radius).
+- اختيار أيام العمل ووقت البداية والنهاية.
+
+**التأثير:** تعديل `ManagerDashboard.tsx` — إضافة تبويبات جديدة. التبويبات الحالية (overview, tasks, visits, employees, analytics, activity) لن تتأثر.
+
+---
+
+## المرحلة 5: تحليلات الإنتاجية والمواقع
+
+### 5.1 بطاقات KPI جديدة في لوحة المدير
+
+| المؤشر                    | الوصف                                             |
+| ------------------------- | ------------------------------------------------- |
+| متوسط ساعات العمل اليومية | إجمالي ساعات الحضور ÷ عدد الأيام                  |
+| نسبة الالتزام بالمواعيد   | عدد أيام الحضور في الوقت ÷ إجمالي أيام الحضور     |
+| أكثر موظف إنتاجية         | الموظف صاحب أكبر عدد مهام مكتملة + أقل تأخير      |
+| أكثر المواقع زيارة        | المنطقة/العميل الأكثر تكراراً في الزيارات والمهام |
+
+### 5.2 رسم بياني: ساعات العمل الأسبوعية
+
+مخطط أعمدة (Bar Chart) يعرض ساعات عمل كل موظف خلال الأسبوع/الشهر.
+
+### 5.3 تقرير المواقع الأكثر نشاطاً
+
+جدول مرتب يعرض:
+
+- اسم الموقع/العميل → عدد الزيارات → إجمالي ساعات العمل هناك → عدد المهام المنجزة.
+- يساعد الإدارة على تحديد العملاء الأكثر استهلاكاً للموارد.
+
+### 5.4 تصدير التقارير (توسيع `useReportExport`)
+
+توسيع نظام التصدير الحالي ليشمل:
+
+- تقرير الحضور والانصراف (PDF/طباعة).
+- تقرير الزيارات الميدانية.
+- تقرير ساعات العمل الشهري (للرواتب).
+
+---
+
+## المرحلة 6: المزامنة عند انقطاع الإنترنت
+
+### 6.1 توسيع `useOfflineQueue.ts`
+
+إضافة أنواع العمليات الجديدة:
+
+```typescript
+type: "create_task" |
+  "update_status" |
+  "update_notes" |
+  "check_in" |
+  "check_out" |
+  "create_visit" |
+  "create_leave_request";
+```
+
+- عند انقطاع الإنترنت، يتم حفظ وقت الجهاز الفعلي + الإحداثيات محلياً.
+- عند عودة الاتصال، تتم المزامنة تلقائياً بالترتيب الزمني.
+
+**التأثير:** توسيع الـ `syncQueue` function بإضافة `else if` branches للأنواع الجديدة — لا تأثير على الأنواع الموجودة.
+
+---
+
+## المرحلة 7: الإشعارات الفورية
+
+- إشعار للمدير عند تسجيل حضور/انصراف موظف.
+- إشعار للمدير عند تقديم طلب إذن جديد.
+- إشعار للموظف عند قبول/رفض طلب الإذن.
+- إشعار تذكيري للموظف إذا لم يسجل حضوره خلال 30 دقيقة من بداية الدوام.
+
+---
+
+## المرحلة 8: التحقق والنشر
+
+1. فحص TypeScript: `npx tsc --noEmit`
+2. بناء الحزمة الإنتاجية: `npm run build`
+3. رفع التحديثات إلى GitHub مع وسم الإصدار `v2.0.0`
+4. بناء تطبيقات الهاتف عبر GitHub Actions
+
+---
+
+## ملخص الملفات المتأثرة
+
+### ملفات جديدة
+
+| الملف                                                      | الوظيفة                         |
+| ---------------------------------------------------------- | ------------------------------- |
+| `supabase/migrations/20260630150000_attendance_system.sql` | هجرة الحضور والزيارات والإجازات |
+| `src/hooks/useAttendance.ts`                               | Hook نظام الحضور                |
+| `src/hooks/useLeaveRequests.ts`                            | Hook طلبات الأذونات             |
+| `src/components/AttendanceCard.tsx`                        | بطاقة الحضور اليومي للموظف      |
+| `src/components/VisitModal.tsx`                            | نموذج إضافة زيارة ميدانية       |
+| `src/components/LeaveRequestModal.tsx`                     | نموذج طلب إذن/إجازة             |
+| `src/components/AttendanceTable.tsx`                       | جدول الحضور في لوحة المدير      |
+| `src/components/LeaveRequestsPanel.tsx`                    | لوحة طلبات الأذونات للمدير      |
+| `src/components/charts/AttendanceChart.tsx`                | رسم بياني لساعات العمل          |
+| `src/components/LocationAnalytics.tsx`                     | تحليلات المواقع الأكثر نشاطاً   |
+
+### ملفات معدّلة
+
+| الملف                             | نوع التعديل                                                  |
+| --------------------------------- | ------------------------------------------------------------ |
+| `supabase_schema.sql`             | إضافة الجداول والسياسات الجديدة                              |
+| `src/types.ts`                    | إضافة واجهات Attendance, LeaveRequest, توسيع Visit و Company |
+| `src/hooks/useVisits.ts`          | دعم الحقول الجديدة                                           |
+| `src/hooks/useOfflineQueue.ts`    | إضافة أنواع المزامنة الجديدة                                 |
+| `src/hooks/useReportExport.ts`    | تقارير الحضور والزيارات                                      |
+| `src/pages/EmployeeDashboard.tsx` | بطاقة الحضور + تبويب الزيارات + طلب الإذن                    |
+| `src/pages/ManagerDashboard.tsx`  | تبويبات الحضور والطلبات + تحليلات                            |
+| `src/pages/ProfileSettings.tsx`   | إعدادات مقر الشركة والدوام                                   |
+
+---
+
+## ترتيب التنفيذ المقترح
+
+| الترتيب | المرحلة                        | التقدير الزمني |
+| ------- | ------------------------------ | -------------- |
+| 1       | قاعدة البيانات (المرحلة 1)     | جلسة واحدة     |
+| 2       | الأنواع والـ Hooks (المرحلة 2) | جلسة واحدة     |
+| 3       | واجهة الموظف (المرحلة 3)       | جلستان         |
+| 4       | واجهة المدير (المرحلة 4)       | جلستان         |
+| 5       | التحليلات (المرحلة 5)          | جلسة واحدة     |
+| 6       | المزامنة Offline (المرحلة 6)   | جلسة واحدة     |
+| 7       | الإشعارات (المرحلة 7)          | جلسة واحدة     |
+| 8       | التحقق والنشر (المرحلة 8)      | جلسة واحدة     |
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+>
+> 1. هل تريد أن يكون تسجيل الحضور **إجبارياً** قبل بدء أي مهمة؟ (أي لا يستطيع الموظف بدء مهمة إلا بعد تسجيل حضوره)
+> 2. هل تريد تحديد عدد أيام الإجازات السنوية المسموحة لكل موظف في النظام؟
+> 3. هل تريد إضافة خيار "العمل عن بُعد" (Remote) كنوع ثالث للحضور؟

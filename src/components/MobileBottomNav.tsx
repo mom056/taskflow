@@ -2,8 +2,8 @@ import { LayoutDashboard, CheckSquare, MapPin, Users, BarChart3, History } from 
 import { useTranslation } from '../contexts/LanguageContext';
 
 interface MobileBottomNavProps {
-  activeTab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity';
-  onChange: (tab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity') => void;
+  activeTab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity' | 'attendance' | 'leaves';
+  onChange: (tab: 'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity' | 'attendance' | 'leaves') => void;
 }
 
 const items = [

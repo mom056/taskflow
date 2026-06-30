@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core';
 
 export interface QueueItem {
   id: string;
-  type: 'create_task' | 'update_status' | 'update_notes';
+  type: 'create_task' | 'update_status' | 'update_notes' | 'check_in' | 'check_out' | 'create_visit' | 'create_leave_request';
   taskId?: string;
   payload: any;
 }
@@ -120,7 +120,48 @@ export function useOfflineQueue(onSyncSuccess?: () => void) {
               image_url: imageUrl, 
               updated_at: Date.now() 
             })
-            .eq('id', item.taskId);
+          if (error) throw error;
+        } else if (item.type === 'check_in') {
+          const { error } = await supabase.from('attendance').insert([item.payload]);
+          if (error) throw error;
+        } else if (item.type === 'check_out') {
+          const { error } = await supabase
+            .from('attendance')
+            .update(item.payload.data)
+            .eq('id', item.payload.id);
+          if (error) throw error;
+        } else if (item.type === 'create_visit') {
+          let imageUrl = item.payload.image_url;
+          if (imageUrl && imageUrl.startsWith('data:image/')) {
+            try {
+              const response = await fetch(imageUrl);
+              const blob = await response.blob();
+              const file = new File([blob], `offline_visit_${Date.now()}.jpg`, { type: 'image/jpeg' });
+              const filePath = `visit-images/${item.payload.employee_id}/${Date.now()}.jpg`;
+              
+              const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file, { upsert: true, contentType: 'image/jpeg' });
+                
+              if (uploadError) throw uploadError;
+              
+              const { data } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+                
+              imageUrl = data.publicUrl;
+            } catch (imgErr) {
+              console.error('[OfflineQueue] Visit image upload failed during sync:', imgErr);
+              throw imgErr;
+            }
+          }
+          const { error } = await supabase.from('visits').insert([{
+            ...item.payload,
+            image_url: imageUrl
+          }]);
+          if (error) throw error;
+        } else if (item.type === 'create_leave_request') {
+          const { error } = await supabase.from('leave_requests').insert([item.payload]);
           if (error) throw error;
         }
         successCount++;

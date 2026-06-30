@@ -25,7 +25,13 @@ CREATE TABLE IF NOT EXISTS public.companies (
   plan TEXT NOT NULL DEFAULT 'free',   -- Subscription plan: free, basic, premium
   max_employees INT NOT NULL DEFAULT 5,-- Limit of employees
   created_at BIGINT NOT NULL,
-  is_active BOOLEAN DEFAULT true       -- To deactivate companies if needed
+  is_active BOOLEAN DEFAULT true,      -- To deactivate companies if needed
+  hq_latitude DECIMAL(10, 8),
+  hq_longitude DECIMAL(11, 8),
+  hq_radius_meters INT DEFAULT 200,
+  work_start_time TEXT DEFAULT '08:00',
+  work_end_time TEXT DEFAULT '17:00',
+  work_days TEXT[] DEFAULT ARRAY['Sun','Mon','Tue','Wed','Thu']
 );
 
 -- 2. Users Table (Modified to include company_id)
@@ -71,6 +77,48 @@ CREATE TABLE IF NOT EXISTS public.visits (
   notes TEXT,
   employee_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL,
+  latitude DECIMAL(10, 8),
+  longitude DECIMAL(11, 8),
+  client_name TEXT,
+  visit_type TEXT DEFAULT 'client_visit',
+  image_url TEXT,
+  duration_minutes INT,
+  check_in_time BIGINT,
+  check_out_time BIGINT
+);
+
+-- 4a. Attendance Table
+CREATE TABLE IF NOT EXISTS public.attendance (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  check_in_time BIGINT NOT NULL,
+  check_in_lat DECIMAL(10, 8),
+  check_in_lng DECIMAL(11, 8),
+  check_in_type TEXT DEFAULT 'office', -- 'office' | 'field'
+  check_out_time BIGINT,
+  check_out_lat DECIMAL(10, 8),
+  check_out_lng DECIMAL(11, 8),
+  total_hours DECIMAL(5, 2),
+  notes TEXT,
+  is_late BOOLEAN DEFAULT false,
+  created_at BIGINT NOT NULL
+);
+
+-- 4b. Leave Requests Table
+CREATE TABLE IF NOT EXISTS public.leave_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL DEFAULT 'excuse', -- 'excuse' | 'sick' | 'annual' | 'emergency'
+  reason TEXT NOT NULL,
+  start_date BIGINT NOT NULL,
+  end_date BIGINT,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'approved' | 'rejected'
+  reviewed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  reviewed_at BIGINT,
+  review_note TEXT,
   created_at BIGINT NOT NULL
 );
 
@@ -594,3 +642,104 @@ CREATE POLICY "activity_log_insert_policy" ON public.activity_log
     company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
     AND actor_id = auth.uid()
   );
+
+-- ── ATTENDANCE & LEAVE REQUESTS POLICIES & TRIGGERS ────────────────
+
+-- A. Attendance Policies
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "attendance_select_policy" ON public.attendance;
+CREATE POLICY "attendance_select_policy" ON public.attendance
+  FOR SELECT TO authenticated
+  USING (
+    is_super_admin() OR
+    employee_id = auth.uid() OR
+    (
+      company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      AND (SELECT role FROM public.users WHERE id = auth.uid()) = 'manager'::user_role
+    )
+  );
+
+DROP POLICY IF EXISTS "attendance_insert_policy" ON public.attendance;
+CREATE POLICY "attendance_insert_policy" ON public.attendance
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    is_super_admin() OR
+    employee_id = auth.uid()
+  );
+
+DROP POLICY IF EXISTS "attendance_update_policy" ON public.attendance;
+CREATE POLICY "attendance_update_policy" ON public.attendance
+  FOR UPDATE TO authenticated
+  USING (
+    is_super_admin() OR
+    employee_id = auth.uid()
+  )
+  WITH CHECK (
+    is_super_admin() OR
+    employee_id = auth.uid()
+  );
+
+DROP POLICY IF EXISTS "attendance_delete_policy" ON public.attendance;
+CREATE POLICY "attendance_delete_policy" ON public.attendance
+  FOR DELETE TO authenticated
+  USING (is_super_admin());
+
+-- B. Leave Requests Policies
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "leave_requests_select_policy" ON public.leave_requests;
+CREATE POLICY "leave_requests_select_policy" ON public.leave_requests
+  FOR SELECT TO authenticated
+  USING (
+    is_super_admin() OR
+    employee_id = auth.uid() OR
+    (
+      company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      AND (SELECT role FROM public.users WHERE id = auth.uid()) = 'manager'::user_role
+    )
+  );
+
+DROP POLICY IF EXISTS "leave_requests_insert_policy" ON public.leave_requests;
+CREATE POLICY "leave_requests_insert_policy" ON public.leave_requests
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    employee_id = auth.uid()
+    AND company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "leave_requests_update_policy" ON public.leave_requests;
+CREATE POLICY "leave_requests_update_policy" ON public.leave_requests
+  FOR UPDATE TO authenticated
+  USING (
+    is_super_admin() OR
+    (
+      company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      AND (SELECT role FROM public.users WHERE id = auth.uid()) = 'manager'::user_role
+    )
+  )
+  WITH CHECK (
+    is_super_admin() OR
+    (
+      company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      AND (SELECT role FROM public.users WHERE id = auth.uid()) = 'manager'::user_role
+    )
+  );
+
+DROP POLICY IF EXISTS "leave_requests_delete_policy" ON public.leave_requests;
+CREATE POLICY "leave_requests_delete_policy" ON public.leave_requests
+  FOR DELETE TO authenticated
+  USING (is_super_admin());
+
+-- C. Trigger Functions
+CREATE OR REPLACE FUNCTION public.check_attendance_insert()
+RETURNS TRIGGER AS $$
+DECLARE
+  comp_start_time TEXT;
+  check_in_local_time TIME;
+  user_company_id UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- (Empty trigger declaration for schema sync, actual full triggers are in migration)
+

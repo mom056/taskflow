@@ -18,6 +18,8 @@ import PullToRefresh from '../components/PullToRefresh';
 import NotificationCenter from '../components/NotificationCenter';
 import AppLogo from '../components/AppLogo';
 import AppLoader from '../components/AppLoader';
+import AttendanceTable from '../components/AttendanceTable';
+import LeaveRequestsPanel from '../components/LeaveRequestsPanel';
 
 import TasksTable from '../components/TasksTable';
 import TaskModal from '../components/TaskModal';
@@ -62,7 +64,7 @@ export default function ManagerDashboard() {
     return activeMap;
   }, [tasks]);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'visits' | 'employees' | 'analytics' | 'activity' | 'attendance' | 'leaves'>('overview');
 
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -411,7 +413,9 @@ export default function ManagerDashboard() {
         visits: 'Visit Logs',
         employees: 'Work Team',
         activity: 'Activity Logs',
-        analytics: 'Analytics & Reports'
+        analytics: 'Analytics & Reports',
+        attendance: 'Attendance Logs',
+        leaves: 'Leave Requests'
       };
       return titles[tab];
     }
@@ -421,7 +425,9 @@ export default function ManagerDashboard() {
       visits: 'سجل الزيارات',
       employees: 'فريق العمل',
       activity: 'سجل العمليات',
-      analytics: 'التحليلات والتقارير'
+      analytics: 'التحليلات والتقارير',
+      attendance: 'سجل الحضور والغياب',
+      leaves: 'طلبات المغادرة والإجازات'
     };
     return titles[tab];
   };
@@ -442,13 +448,15 @@ export default function ManagerDashboard() {
         </div>
 
         <nav className="flex flex-col flex-1 gap-1">
-          {(['overview', 'tasks', 'visits', 'employees', 'activity', 'analytics'] as const).map(tab => {
+          {(['overview', 'tasks', 'visits', 'attendance', 'leaves', 'employees', 'activity', 'analytics'] as const).map(tab => {
             const getSidebarLabel = (tId: typeof tab) => {
               if (language === 'en') {
                 const labelsEn: Record<typeof tab, string> = {
                   overview: 'Dashboard',
                   tasks: 'Daily Tasks',
                   visits: 'Visit Logs',
+                  attendance: 'Attendance Logs',
+                  leaves: 'Leave Requests',
                   employees: 'Employees',
                   activity: 'Activity Logs',
                   analytics: 'Analytics & Reports'
@@ -459,6 +467,8 @@ export default function ManagerDashboard() {
                 overview: 'لوحة التحكم',
                 tasks: 'المهام اليومية',
                 visits: 'سجل الزيارات',
+                attendance: 'حضور وانصراف',
+                leaves: 'طلبات الإجازات',
                 employees: 'الموظفين',
                 activity: 'سجل العمليات',
                 analytics: 'التحليلات والتقارير'
@@ -616,6 +626,31 @@ export default function ManagerDashboard() {
                     <p className={`text-3xl md:text-4xl font-bold mt-1 ${s.color}`}>{s.value}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* Quick Actions for Attendance & Leaves */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('attendance')}
+                  className="bg-linear-to-br from-blue-50 to-blue-100/60 p-5 rounded-3xl border border-blue-100/70 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
+                  dir={language === 'ar' ? 'rtl' : 'ltr'}
+                >
+                  <span className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-blue-200">⏰</span>
+                  <h3 className={`font-bold text-slate-800 text-sm mt-3 mb-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'سجل الحضور والانصراف' : 'Attendance Logs'}</h3>
+                  <p className={`text-[10px] text-slate-400 m-0 leading-relaxed ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'متابعة أوقات دخول وخروج الموظفين والمسافات الجغرافية ولحظات التأخير' : 'Monitor check-in/out timings, spatial constraints, and latency logs'}</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('leaves')}
+                  className="bg-linear-to-br from-indigo-50 to-indigo-100/60 p-5 rounded-3xl border border-indigo-100/70 text-right cursor-pointer hover:shadow-xs active:scale-[0.99] transition-all"
+                  dir={language === 'ar' ? 'rtl' : 'ltr'}
+                >
+                  <span className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-lg font-bold shadow-md shadow-indigo-200">📄</span>
+                  <h3 className={`font-bold text-slate-800 text-sm mt-3 mb-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'طلبات المغادرة والإجازات' : 'Leave & Excuse Requests'}</h3>
+                  <p className={`text-[10px] text-slate-400 m-0 leading-relaxed ${language === 'ar' ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'مراجعة وتدقيق وقبول أو رفض طلبات مغادرات الموظفين والإجازات المرضية والسنوية' : 'Review, approve, or reject employee excuse, sickness, or annual leaves'}</p>
+                </button>
               </div>
 
               {/* Recent Tasks */}
@@ -1000,6 +1035,20 @@ export default function ManagerDashboard() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ══ ATTENDANCE ══ */}
+          {activeTab === 'attendance' && (
+            <div className="p-4 md:p-8 pb-24 md:pb-8">
+              <AttendanceTable />
+            </div>
+          )}
+
+          {/* ══ LEAVES ══ */}
+          {activeTab === 'leaves' && (
+            <div className="p-4 md:p-8 pb-24 md:pb-8">
+              <LeaveRequestsPanel />
             </div>
           )}
 

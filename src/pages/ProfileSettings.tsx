@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowRight, Camera, Save, Lock, UserPlus, Shield, CheckCircle } from 'lucide-react';
+import { ArrowRight, Camera, Save, Lock, UserPlus, Shield, CheckCircle, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import imageCompression from 'browser-image-compression';
 import { useTranslation } from '../contexts/LanguageContext';
@@ -10,11 +10,13 @@ import { useActivityLog } from '../hooks/useActivityLog';
 import { useBiometricAuth } from '../hooks/useBiometricAuth';
 import { triggerHaptic } from '../lib/nativeServices';
 import { useTheme } from '../contexts/ThemeContext';
+import { useGeoLocation } from '../hooks/useGeoLocation';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile, refreshRole, company, signOut } = useAuth();
+  const { getCoordinates, loading: isLocating } = useGeoLocation();
   const { logActivity } = useActivityLog();
   const { t, language, changeLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
@@ -82,6 +84,12 @@ export default function ProfileSettings() {
   // Company Settings fields
   const [companyName, setCompanyName] = useState(company?.name || '');
   const [logoUrl, setLogoUrl] = useState(company?.logoUrl || '');
+  const [hqLatitude, setHqLatitude] = useState(company?.hqLatitude?.toString() || '');
+  const [hqLongitude, setHqLongitude] = useState(company?.hqLongitude?.toString() || '');
+  const [hqRadiusMeters, setHqRadiusMeters] = useState(company?.hqRadiusMeters?.toString() || '200');
+  const [workStartTime, setWorkStartTime] = useState(company?.workStartTime || '08:00');
+  const [workEndTime, setWorkEndTime] = useState(company?.workEndTime || '17:00');
+  const [workDays, setWorkDays] = useState<string[]>(company?.workDays || ['Sun','Mon','Tue','Wed','Thu']);
   const [isUpdatingCompany, setUpdatingCompany] = useState(false);
   const [isUploadingLogo, setUploadingLogo] = useState(false);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +101,12 @@ export default function ProfileSettings() {
     if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
     if (company?.name) setCompanyName(company.name);
     if (company?.logoUrl) setLogoUrl(company.logoUrl);
+    if (company?.hqLatitude) setHqLatitude(company.hqLatitude.toString());
+    if (company?.hqLongitude) setHqLongitude(company.hqLongitude.toString());
+    if (company?.hqRadiusMeters) setHqRadiusMeters(company.hqRadiusMeters.toString());
+    if (company?.workStartTime) setWorkStartTime(company.workStartTime);
+    if (company?.workEndTime) setWorkEndTime(company.workEndTime);
+    if (company?.workDays) setWorkDays(company.workDays);
   }, [profile, user, company]);
 
   // Scroll to register employee form if hash is present
@@ -238,7 +252,7 @@ export default function ProfileSettings() {
     }
   };
 
-  // 3.5. Update Company Name (Manager only)
+  // 3.5. Update Company Settings (Manager only)
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) return toast.error(language === 'ar' ? 'اسم الشركة مطلوب' : 'Company name is required');
@@ -248,20 +262,56 @@ export default function ProfileSettings() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update({ name: companyName.trim() })
+        .update({
+          name: companyName.trim(),
+          hq_latitude: hqLatitude ? Number(hqLatitude) : null,
+          hq_longitude: hqLongitude ? Number(hqLongitude) : null,
+          hq_radius_meters: hqRadiusMeters ? Number(hqRadiusMeters) : 200,
+          work_start_time: workStartTime || null,
+          work_end_time: workEndTime || null,
+          work_days: workDays
+        })
         .eq('id', company.id);
 
       if (error) throw error;
 
-      logActivity('company_settings_updated', 'company', company.id, { name: companyName.trim() });
+      logActivity('company_settings_updated', 'company', company.id, { 
+        name: companyName.trim(),
+        hq_latitude: hqLatitude ? Number(hqLatitude) : null,
+        hq_longitude: hqLongitude ? Number(hqLongitude) : null,
+        hq_radius_meters: hqRadiusMeters ? Number(hqRadiusMeters) : 200,
+        work_start_time: workStartTime,
+        work_end_time: workEndTime,
+        work_days: workDays
+      });
       triggerHaptic('success');
-      toast.success(language === 'ar' ? 'تم تحديث اسم الشركة بنجاح' : 'Company name updated successfully');
+      toast.success(language === 'ar' ? 'تم تحديث إعدادات الشركة بنجاح' : 'Company settings updated successfully');
       await refreshRole();
     } catch (err: any) {
       triggerHaptic('error');
-      toast.error(err.message || (language === 'ar' ? 'تعذر تحديث اسم الشركة' : 'Could not update company name'));
+      toast.error(err.message || (language === 'ar' ? 'تعذر تحديث إعدادات الشركة' : 'Could not update company settings'));
     } finally {
       setUpdatingCompany(false);
+    }
+  };
+
+  const handleFetchCurrentCoords = async () => {
+    const toastId = toast.loading(language === 'ar' ? 'جاري جلب إحداثيات موقعك الحالي...' : 'Fetching your current GPS coordinates...');
+    try {
+      const coords = await getCoordinates();
+      setHqLatitude(coords.latitude.toString());
+      setHqLongitude(coords.longitude.toString());
+      toast.success(language === 'ar' ? 'تم جلب الإحداثيات بنجاح' : 'Coordinates fetched successfully', { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي' : 'Failed to get location'), { id: toastId });
+    }
+  };
+
+  const toggleWorkDay = (day: string) => {
+    if (workDays.includes(day)) {
+      setWorkDays(workDays.filter(d => d !== day));
+    } else {
+      setWorkDays([...workDays, day]);
     }
   };
 
@@ -809,30 +859,158 @@ export default function ProfileSettings() {
               </div>
             </div>
 
-            <form onSubmit={handleUpdateCompany} className="space-y-4 pt-2">
+            <form onSubmit={handleUpdateCompany} className="space-y-6 pt-2">
+              {/* Company Name */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">
                   {language === 'ar' ? 'اسم الشركة' : 'Company Name'}
                 </label>
-                <div className="flex gap-3">
-                  <input 
-                    type="text" 
-                    value={companyName} 
-                    onChange={(e) => setCompanyName(e.target.value)} 
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm bg-slate-50 focus:bg-white transition"
-                    placeholder={language === 'ar' ? 'اسم الشركة' : 'Company Name'}
-                    required
-                  />
-                  <button 
-                    type="submit" 
-                    disabled={isUpdatingCompany}
-                    className="bg-blue-600 hover:bg-blue-700 text-white border-none px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 shrink-0 shadow-sm"
+                <input 
+                  type="text" 
+                  value={companyName} 
+                  onChange={(e) => setCompanyName(e.target.value)} 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm bg-slate-50 focus:bg-white transition"
+                  placeholder={language === 'ar' ? 'اسم الشركة' : 'Company Name'}
+                  required
+                />
+              </div>
+
+              {/* HQ Coordinates & Geofencing */}
+              <div className="space-y-3 pt-3 border-t border-slate-50">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                    <span>{language === 'ar' ? 'الموقع الجغرافي للمقر الرئيسي' : 'HQ Geolocation Coordinates'}</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleFetchCurrentCoords}
+                    disabled={isLocating}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border-none px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
                   >
-                    <Save className="w-4 h-4" />
-                    {isUpdatingCompany ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ الاسم' : 'Save Name')}
+                    {isLocating ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+                        {language === 'ar' ? 'جاري التحديد...' : 'Locating...'}
+                      </>
+                    ) : (
+                      <>
+                        <span>📍</span>
+                        {language === 'ar' ? 'موقعي الحالي' : 'Use Current'}
+                      </>
+                    )}
                   </button>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-400">خط العرض (Latitude)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 24.7136"
+                      value={hqLatitude}
+                      onChange={(e) => setHqLatitude(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white focus:outline-hidden focus:border-blue-600 transition"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-400">خط الطول (Longitude)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 46.6753"
+                      value={hqLongitude}
+                      onChange={(e) => setHqLongitude(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white focus:outline-hidden focus:border-blue-600 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">{language === 'ar' ? 'نطاق الحضور الجغرافي (متر)' : 'Geofence Radius (meters)'}</label>
+                  <select
+                    value={hqRadiusMeters}
+                    onChange={(e) => setHqRadiusMeters(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:border-blue-600 transition"
+                  >
+                    <option value="50">50 {language === 'ar' ? 'متر' : 'meters'}</option>
+                    <option value="100">100 {language === 'ar' ? 'متر' : 'meters'}</option>
+                    <option value="200">200 {language === 'ar' ? 'متر (موصى به)' : 'meters (Recommended)'}</option>
+                    <option value="500">500 {language === 'ar' ? 'متر' : 'meters'}</option>
+                    <option value="1000">1000 {language === 'ar' ? 'متر (1 كم)' : 'meters (1 km)'}</option>
+                  </select>
+                </div>
               </div>
+
+              {/* Shift Hours & Days */}
+              <div className="space-y-3 pt-3 border-t border-slate-50">
+                <h4 className="font-bold text-slate-800 text-xs">
+                  {language === 'ar' ? 'أوقات وأيام العمل الرسمية' : 'Working Hours & Shifts'}
+                </h4>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-400">{language === 'ar' ? 'وقت بدء المناوبة' : 'Shift Start Time'}</label>
+                    <input
+                      type="time"
+                      value={workStartTime}
+                      onChange={(e) => setWorkStartTime(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white focus:outline-hidden focus:border-blue-600 transition"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-400">{language === 'ar' ? 'وقت نهاية المناوبة' : 'Shift End Time'}</label>
+                    <input
+                      type="time"
+                      value={workEndTime}
+                      onChange={(e) => setWorkEndTime(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white focus:outline-hidden focus:border-blue-600 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-400">{language === 'ar' ? 'أيام الدوام الأسبوعية' : 'Weekly Working Days'}</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { id: 'Sun', ar: 'ح', en: 'Su' },
+                      { id: 'Mon', ar: 'ن', en: 'Mo' },
+                      { id: 'Tue', ar: 'ث', en: 'Tu' },
+                      { id: 'Wed', ar: 'ر', en: 'We' },
+                      { id: 'Thu', ar: 'خ', en: 'Th' },
+                      { id: 'Fri', ar: 'ج', en: 'Fr' },
+                      { id: 'Sat', ar: 'س', en: 'Sa' }
+                    ]).map(day => {
+                      const isSelected = workDays.includes(day.id);
+                      return (
+                        <button
+                          key={day.id}
+                          type="button"
+                          onClick={() => toggleWorkDay(day.id)}
+                          className={`w-9 h-9 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xs' 
+                              : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          {language === 'ar' ? day.ar : day.en}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button 
+                type="submit" 
+                disabled={isUpdatingCompany}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white border-none py-3 rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Save className="w-4 h-4" />
+                {isUpdatingCompany ? (language === 'ar' ? 'جاري حفظ الإعدادات...' : 'Saving settings...') : (language === 'ar' ? 'حفظ إعدادات الشركة' : 'Save Company Settings')}
+              </button>
             </form>
           </div>
         )}
