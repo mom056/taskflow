@@ -38,7 +38,9 @@ export function useTasks(employeeId?: string) {
       locationVerifiedAt: d.location_verified_at,
       startLatitude: d.start_latitude,
       startLongitude: d.start_longitude,
-      startLocationVerifiedAt: d.start_location_verified_at
+      startLocationVerifiedAt: d.start_location_verified_at,
+      targetLatitude: d.target_latitude,
+      targetLongitude: d.target_longitude
     })) as Task[];
   };
 

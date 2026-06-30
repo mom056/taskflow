@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   start_latitude DECIMAL(10, 8),
   start_longitude DECIMAL(11, 8),
   start_location_verified_at BIGINT,
+  target_latitude DECIMAL(10, 8),
+  target_longitude DECIMAL(11, 8),
   created_at BIGINT NOT NULL,
   updated_at BIGINT
 );
@@ -140,6 +142,67 @@ CREATE TRIGGER check_user_update_trigger
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.check_user_update();
 
+-- Restrict user profile inserts to prevent role and company escalation
+CREATE OR REPLACE FUNCTION public.check_user_insert()
+RETURNS TRIGGER AS $$
+DECLARE
+  user_count INT;
+  jwt_metadata JSONB;
+  company_name_val TEXT;
+BEGIN
+  -- A. Allow Deno Edge Functions using the service_role key to bypass checks
+  IF auth.role() = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+
+  -- B. Allow first platform user to register as super_admin
+  SELECT COUNT(*)::INT INTO user_count FROM public.users;
+  IF user_count = 0 THEN
+    IF NEW.role::text != 'super_admin' THEN
+      NEW.role := 'super_admin';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- C. Block normal users from inserting themselves as super_admin
+  IF NEW.role::text = 'super_admin' THEN
+    RAISE EXCEPTION 'غير مسموح بإنشاء مشرف عام جديد إلا من قبل النظام.';
+  END IF;
+
+  -- D. For managers, verify that they signed up creating a company (metadata contains company_name)
+  IF NEW.role::text = 'manager' THEN
+    BEGIN
+      jwt_metadata := auth.jwt() -> 'user_metadata';
+      IF jwt_metadata IS NOT NULL THEN
+        company_name_val := jwt_metadata ->> 'company_name';
+      ELSE
+        company_name_val := NULL;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      company_name_val := NULL;
+    END;
+
+    IF company_name_val IS NULL OR trim(company_name_val) = '' THEN
+      RAISE EXCEPTION 'غير مسموح بإنشاء مدير جديد إلا عند تسجيل شركة جديدة.';
+    END IF;
+    
+    RETURN NEW;
+  END IF;
+
+  -- E. For employees, block direct inserts (employees must be added by managers via Edge Function)
+  IF NEW.role::text = 'employee' THEN
+    RAISE EXCEPTION 'يجب إضافة الموظفين من قبل مدير الشركة عبر التطبيق.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS check_user_insert_trigger ON public.users;
+CREATE TRIGGER check_user_insert_trigger
+  BEFORE INSERT ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.check_user_insert();
+
 -- Enforce subscription max_employees limits on users table for 'employee' role
 CREATE OR REPLACE FUNCTION public.check_employee_limit()
 RETURNS TRIGGER AS $$
@@ -162,6 +225,43 @@ DROP TRIGGER IF EXISTS check_employee_limit_trigger ON public.users;
 CREATE TRIGGER check_employee_limit_trigger
   BEFORE INSERT ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.check_employee_limit();
+
+-- Prevent employees from modifying core task definitions (only status/progress are editable)
+CREATE OR REPLACE FUNCTION public.check_task_update()
+RETURNS TRIGGER AS $$
+DECLARE
+  caller_role TEXT;
+BEGIN
+  -- Allow service_role key to bypass checks
+  IF auth.role() = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Retrieve caller role
+  SELECT role::text INTO caller_role FROM public.users WHERE id = auth.uid();
+
+  -- If employee is updating, restrict changes to progress & verification columns only
+  IF caller_role = 'employee' THEN
+    IF OLD.title IS DISTINCT FROM NEW.title OR
+       OLD.description IS DISTINCT FROM NEW.description OR
+       OLD.due_date IS DISTINCT FROM NEW.due_date OR
+       OLD.company_id IS DISTINCT FROM NEW.company_id OR
+       OLD.created_by IS DISTINCT FROM NEW.created_by OR
+       OLD.employee_id IS DISTINCT FROM NEW.employee_id OR
+       OLD.target_latitude IS DISTINCT FROM NEW.target_latitude OR
+       OLD.target_longitude IS DISTINCT FROM NEW.target_longitude THEN
+      RAISE EXCEPTION 'غير مسموح للموظف بتعديل تفاصيل المهمة الأساسية.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS check_task_update_trigger ON public.tasks;
+CREATE TRIGGER check_task_update_trigger
+  BEFORE UPDATE ON public.tasks
+  FOR EACH ROW EXECUTE FUNCTION public.check_task_update();
 
 -- Prevent non-super-admins from changing subscription plans, employee limits, active status, name, or slug on companies table
 CREATE OR REPLACE FUNCTION public.check_company_update()
@@ -197,7 +297,12 @@ CREATE TRIGGER check_company_update_trigger
 
 DROP POLICY IF EXISTS "companies_select_policy" ON public.companies;
 CREATE POLICY "companies_select_policy" ON public.companies 
-  FOR SELECT USING (auth.uid() IS NOT NULL);
+  FOR SELECT USING (
+    is_super_admin() OR 
+    id = (SELECT company_id FROM public.users WHERE id = auth.uid()) OR
+    -- Allow signup flow (user is authenticated but profile is not inserted yet)
+    NOT EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid())
+  );
 
 DROP POLICY IF EXISTS "companies_insert_policy" ON public.companies;
 CREATE POLICY "companies_insert_policy" ON public.companies 
@@ -316,13 +421,15 @@ CREATE POLICY "visits_select_policy" ON public.visits
     )
   );
 
-DROP POLICY IF EXISTS "Employees can insert their own visits" ON public.visits;
 DROP POLICY IF EXISTS "visits_insert_policy" ON public.visits;
 CREATE POLICY "visits_insert_policy" ON public.visits 
   FOR INSERT WITH CHECK (
     is_super_admin() OR (
-      company_id = get_my_company_id()
-      AND auth.uid() IS NOT NULL
+      company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      AND (
+        (SELECT role FROM public.users WHERE id = auth.uid()) = 'manager'::user_role
+        OR employee_id = auth.uid()
+      )
     )
   );
 
@@ -352,38 +459,101 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true) 
 ON CONFLICT (id) DO NOTHING;
 
-DROP POLICY IF EXISTS "Authenticated users can upload task images" ON storage.objects;
-CREATE POLICY "Authenticated users can upload task images"
-  ON storage.objects FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL AND bucket_id = 'task-images');
+-- Avatars Public Read Access
+DROP POLICY IF EXISTS "Avatars Public Read Access" ON storage.objects;
+CREATE POLICY "Avatars Public Read Access" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
 
-DROP POLICY IF EXISTS "Users can delete their own task images" ON storage.objects;
-CREATE POLICY "Users can delete their own task images"
-  ON storage.objects FOR DELETE
-  USING (auth.uid() IS NOT NULL AND bucket_id = 'task-images');
-
-DROP POLICY IF EXISTS "Users can upload their own avatar" ON storage.objects;
-CREATE POLICY "Users can upload their own avatar"
-  ON storage.objects FOR INSERT
+-- Manager write policies for company-logos folder (isolated by company ID)
+DROP POLICY IF EXISTS "Manager Insert Access" ON storage.objects;
+CREATE POLICY "Manager Insert Access" ON storage.objects
+  FOR INSERT TO authenticated
   WITH CHECK (
-    auth.uid() IS NOT NULL 
-    AND bucket_id = 'avatars' 
-    AND name LIKE (auth.uid()::text || '%')
+    bucket_id = 'avatars' 
+    AND (storage.foldername(name))[1] = 'company-logos'
+    AND (SELECT role FROM public.users WHERE id = auth.uid()) IN ('manager', 'super_admin')
+    AND (storage.filename(name)) LIKE ((SELECT company_id::text FROM public.users WHERE id = auth.uid()) || '%')
   );
 
-DROP POLICY IF EXISTS "Users can update their own avatar" ON storage.objects;
-CREATE POLICY "Users can update their own avatar"
-  ON storage.objects FOR UPDATE
+DROP POLICY IF EXISTS "Manager Update Access" ON storage.objects;
+CREATE POLICY "Manager Update Access" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'avatars' 
+    AND (storage.foldername(name))[1] = 'company-logos'
+    AND (SELECT role FROM public.users WHERE id = auth.uid()) IN ('manager', 'super_admin')
+    AND (storage.filename(name)) LIKE ((SELECT company_id::text FROM public.users WHERE id = auth.uid()) || '%')
+  )
   WITH CHECK (
-    auth.uid() IS NOT NULL 
-    AND bucket_id = 'avatars' 
-    AND name LIKE (auth.uid()::text || '%')
+    bucket_id = 'avatars' 
+    AND (storage.foldername(name))[1] = 'company-logos'
+    AND (SELECT role FROM public.users WHERE id = auth.uid()) IN ('manager', 'super_admin')
+    AND (storage.filename(name)) LIKE ((SELECT company_id::text FROM public.users WHERE id = auth.uid()) || '%')
   );
 
-DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
-CREATE POLICY "Anyone can view avatars"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'avatars');
+DROP POLICY IF EXISTS "Manager Delete Access" ON storage.objects;
+CREATE POLICY "Manager Delete Access" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'avatars' 
+    AND (storage.foldername(name))[1] = 'company-logos'
+    AND (SELECT role FROM public.users WHERE id = auth.uid()) IN ('manager', 'super_admin')
+    AND (storage.filename(name)) LIKE ((SELECT company_id::text FROM public.users WHERE id = auth.uid()) || '%')
+  );
+
+-- Profile picture policies for avatars folder (isolated by auth user ID)
+DROP POLICY IF EXISTS "Avatars Upload Access" ON storage.objects;
+CREATE POLICY "Avatars Upload Access" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = 'avatars'
+    AND (storage.filename(name)) LIKE (auth.uid()::text || '%')
+  );
+
+DROP POLICY IF EXISTS "Avatars Update/Delete Access" ON storage.objects;
+CREATE POLICY "Avatars Update/Delete Access" ON storage.objects
+  FOR ALL TO authenticated
+  USING (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = 'avatars'
+    AND (storage.filename(name)) LIKE (auth.uid()::text || '%')
+  );
+
+-- Task Images bucket policies (isolated by company ownership of the task)
+DROP POLICY IF EXISTS "Task Images Public Read Access" ON storage.objects;
+CREATE POLICY "Task Images Public Read Access" ON storage.objects
+  FOR SELECT USING (bucket_id = 'task-images');
+
+DROP POLICY IF EXISTS "Task Images Upload Access" ON storage.objects;
+CREATE POLICY "Task Images Upload Access" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'task-images'
+    AND (
+      is_super_admin() OR
+      EXISTS (
+        SELECT 1 FROM public.tasks t
+        WHERE t.id::text = (storage.foldername(name))[1]
+        AND t.company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "Task Images Delete Access" ON storage.objects;
+CREATE POLICY "Task Images Delete Access" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'task-images'
+    AND (
+      is_super_admin() OR
+      EXISTS (
+        SELECT 1 FROM public.tasks t
+        WHERE t.id::text = (storage.foldername(name))[1]
+        AND t.company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+      )
+    )
+  );
 
 -- ── MIGRATIONS & ALTERATIONS ────────────────────────────────────
 
@@ -422,4 +592,5 @@ CREATE POLICY "activity_log_insert_policy" ON public.activity_log
   TO authenticated
   WITH CHECK (
     company_id = (SELECT company_id FROM public.users WHERE id = auth.uid())
+    AND actor_id = auth.uid()
   );

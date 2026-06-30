@@ -68,6 +68,7 @@ export default function EmployeeDashboard() {
   // Swipe gesture states
   const [touchStart, setTouchStart] = useState<{ id: string; x: number; y: number } | null>(null);
   const [swipeTranslate, setSwipeTranslate] = useState<{ id: string; x: number } | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
   // Get current user location on mount and on refresh
   useEffect(() => {
@@ -91,15 +92,26 @@ export default function EmployeeDashboard() {
       });
   }, [getCoordinates]);
 
-  // Check for in-app updates on startup
+  // Check for in-app updates on startup (cached for 24 hours to prevent GitHub API rate limits)
   useEffect(() => {
     const checkUpdates = async () => {
       try {
+        const lastCheck = localStorage.getItem('last_version_check_time');
+        const now = Date.now();
+        // Skip check if we already checked in the last 24 hours (86,400,000 ms)
+        if (lastCheck && now - parseInt(lastCheck, 10) < 86400000) {
+          console.log('[Update Checker] Skipped. Last check was less than 24 hours ago.');
+          return;
+        }
+
         const res = await fetch('https://api.github.com/repos/mom056/taskflow/releases/latest');
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
         const localVersion = 'v1.3.3'; // current build version
+
+        // Record check timestamp
+        localStorage.setItem('last_version_check_time', now.toString());
 
         if (latestTag && latestTag !== localVersion) {
           setUpdateInfo({
@@ -261,6 +273,9 @@ export default function EmployeeDashboard() {
 
   const handleUpdateStatus = async (taskId: string, newStatus: TaskStatus) => {
     if (!user) return;
+    if (updatingTaskId) return; // Debounce concurrent clicks
+    setUpdatingTaskId(taskId);
+
     const isTempTask = taskId.length < 15;
 
     let latitude = null;
@@ -270,115 +285,119 @@ export default function EmployeeDashboard() {
     const isStart = newStatus === 'in_progress';
     const isComplete = newStatus === 'completed';
 
-    if (isStart || isComplete) {
-      const toastId = toast.loading(isStart 
-        ? (language === 'ar' ? 'جاري تحديد موقعك الجغرافي لتوثيق بدء العمل على المهمة...' : 'Getting GPS location to document task start...')
-        : (language === 'ar' ? 'جاري تحديد موقعك الجغرافي للتحقق من إتمام المهمة ميدانياً...' : 'Getting GPS location to verify task completion...')
-      );
-      try {
-        const coords = await getCoordinates();
-        latitude = coords.latitude;
-        longitude = coords.longitude;
-        locationVerifiedAt = Date.now();
-        setUserCoords(coords); // Update coordinates state
-        toast.success(isStart 
-          ? (language === 'ar' ? 'تم توثيق موقع بدء العمل بنجاح ✓' : 'Start location verified ✓') 
-          : (language === 'ar' ? 'تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓' : 'GPS location captured successfully ✓'), 
-          { id: toastId }
-        );
-        // Warn when location is approximate (cached or low-accuracy)
-        if (coords.approximate) {
-          toast(language === 'ar' 
-            ? '⚠️ تنبيه: الموقع المسجل تقريبي وقد لا يمثل مكانك الحالي بدقة. حاول الانتقال لمكان مفتوح لتحسين الدقة.'
-            : '⚠️ Warning: GPS is approximate. Try moving to an open area for better accuracy.', {
-            duration: 6000,
-            icon: '📍',
-          });
-        }
-      } catch (err: any) {
-        triggerHaptic('error');
-        setPermissionGuideType('gps');
-        setIsPermissionGuideOpen(true);
-        toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.' : 'GPS failure. Access permission is required to update task status.'), { id: toastId });
-        return; // Block status change if GPS coordinate capture fails
-      }
-    }
-
-    const payload: any = { status: newStatus };
-    if (isStart) {
-      payload.start_latitude = latitude;
-      payload.start_longitude = longitude;
-      payload.start_location_verified_at = locationVerifiedAt;
-    } else if (isComplete) {
-      payload.latitude = latitude;
-      payload.longitude = longitude;
-      payload.location_verified_at = locationVerifiedAt;
-    }
-
-    if (!isOnline || isTempTask) {
-      addToQueue('update_status', payload, taskId);
-      return;
-    }
-
     try {
-      const dbUpdatePayload: any = { 
-        status: newStatus, 
-        updated_at: Date.now()
-      };
-      
-      if (isStart) {
-        dbUpdatePayload.start_latitude = latitude;
-        dbUpdatePayload.start_longitude = longitude;
-        dbUpdatePayload.start_location_verified_at = locationVerifiedAt;
-      } else if (isComplete) {
-        dbUpdatePayload.latitude = latitude;
-        dbUpdatePayload.longitude = longitude;
-        dbUpdatePayload.location_verified_at = locationVerifiedAt;
+      if (isStart || isComplete) {
+        const toastId = toast.loading(isStart 
+          ? (language === 'ar' ? 'جاري تحديد موقعك الجغرافي لتوثيق بدء العمل على المهمة...' : 'Getting GPS location to document task start...')
+          : (language === 'ar' ? 'جاري تحديد موقعك الجغرافي للتحقق من إتمام المهمة ميدانياً...' : 'Getting GPS location to verify task completion...')
+        );
+        try {
+          const coords = await getCoordinates();
+          latitude = coords.latitude;
+          longitude = coords.longitude;
+          locationVerifiedAt = Date.now();
+          setUserCoords(coords); // Update coordinates state
+          toast.success(isStart 
+            ? (language === 'ar' ? 'تم توثيق موقع بدء العمل بنجاح ✓' : 'Start location verified ✓') 
+            : (language === 'ar' ? 'تم التقاط إحداثيات الموقع الجغرافي بنجاح ✓' : 'GPS location captured successfully ✓'), 
+            { id: toastId }
+          );
+          // Warn when location is approximate (cached or low-accuracy)
+          if (coords.approximate) {
+            toast(language === 'ar' 
+              ? '⚠️ تنبيه: الموقع المسجل تقريبي وقد لا يمثل مكانك الحالي بدقة. حاول الانتقال لمكان مفتوح لتحسين الدقة.'
+              : '⚠️ Warning: GPS is approximate. Try moving to an open area for better accuracy.', {
+              duration: 6000,
+              icon: '📍',
+            });
+          }
+        } catch (err: any) {
+          triggerHaptic('error');
+          setPermissionGuideType('gps');
+          setIsPermissionGuideOpen(true);
+          toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي. يجب السماح بالوصول للـ GPS لتغيير حالة المهمة.' : 'GPS failure. Access permission is required to update task status.'), { id: toastId });
+          return; // Block status change if GPS coordinate capture fails
+        }
       }
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .update(dbUpdatePayload)
-        .eq('id', taskId)
-        .select();
-      if (error) throw error;
-      if (!data?.length) {
-        toast.error(language === 'ar' ? 'لا تملك صلاحية تحديث هذه المهمة' : 'You do not have permission to update this task');
+      const payload: any = { status: newStatus };
+      if (isStart) {
+        payload.start_latitude = latitude;
+        payload.start_longitude = longitude;
+        payload.start_location_verified_at = locationVerifiedAt;
+      } else if (isComplete) {
+        payload.latitude = latitude;
+        payload.longitude = longitude;
+        payload.location_verified_at = locationVerifiedAt;
+      }
+
+      if (!isOnline || isTempTask) {
+        addToQueue('update_status', payload, taskId);
         return;
       }
 
-      // Notify the manager/creator of the task
-      const updatedTask = data[0];
-      if (updatedTask.created_by && updatedTask.created_by !== user.id) {
-        const statusText = newStatus === 'in_progress' ? 'بدأ العمل على' : 'أتمّ';
-        const statusTextEn = newStatus === 'in_progress' ? 'started working on' : 'completed';
-        await supabase.from('notifications').insert([{
-          user_id: updatedTask.created_by,
-          title: language === 'ar' ? 'تحديث على حالة مهمة' : 'Task Status Updated',
-          body: language === 'ar'
-            ? `${profile?.name || 'الموظف'} ${statusText} المهمة: ${updatedTask.title}`
-            : `${profile?.name || 'Employee'} ${statusTextEn} the task: ${updatedTask.title}`,
-          link: '/manager',
-          company_id: profile?.company_id,
-          created_at: Date.now()
-        }]);
-      }
+      try {
+        const dbUpdatePayload: any = { 
+          status: newStatus, 
+          updated_at: Date.now()
+        };
+        
+        if (isStart) {
+          dbUpdatePayload.start_latitude = latitude;
+          dbUpdatePayload.start_longitude = longitude;
+          dbUpdatePayload.start_location_verified_at = locationVerifiedAt;
+        } else if (isComplete) {
+          dbUpdatePayload.latitude = latitude;
+          dbUpdatePayload.longitude = longitude;
+          dbUpdatePayload.location_verified_at = locationVerifiedAt;
+        }
 
-      logActivity('task_status_changed', 'task', taskId, {
-        title: data[0]?.title || 'task',
-        oldStatus: tasks.find(t => t.id === taskId)?.status,
-        newStatus: newStatus
-      });
-      triggerHaptic(isComplete ? 'success' : 'light');
-      queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
-      toast.success(isStart 
-        ? (language === 'ar' ? 'تم بدء العمل على المهمة وتوثيق موقعك' : 'Task started and location documented') 
-        : (language === 'ar' ? 'تم إتمام المهمة وتوثيق موقعك' : 'Task completed and location documented')
-      );
-    } catch (err: any) {
-      triggerHaptic('error');
-      console.error('[Task Update]', err);
-      toast.error(language === 'ar' ? `خطأ: ${err.message || 'تعذر تحديث الحالة'}` : `Error: ${err.message || 'Could not update status'}`);
+        const { data, error } = await supabase
+          .from('tasks')
+          .update(dbUpdatePayload)
+          .eq('id', taskId)
+          .select();
+        if (error) throw error;
+        if (!data?.length) {
+          toast.error(language === 'ar' ? 'لا تملك صلاحية تحديث هذه المهمة' : 'You do not have permission to update this task');
+          return;
+        }
+
+        // Notify the manager/creator of the task
+        const updatedTask = data[0];
+        if (updatedTask.created_by && updatedTask.created_by !== user.id) {
+          const statusText = newStatus === 'in_progress' ? 'بدأ العمل على' : 'أتمّ';
+          const statusTextEn = newStatus === 'in_progress' ? 'started working on' : 'completed';
+          await supabase.from('notifications').insert([{
+            user_id: updatedTask.created_by,
+            title: language === 'ar' ? 'تحديث على حالة مهمة' : 'Task Status Updated',
+            body: language === 'ar'
+              ? `${profile?.name || 'الموظف'} ${statusText} المهمة: ${updatedTask.title}`
+              : `${profile?.name || 'Employee'} ${statusTextEn} the task: ${updatedTask.title}`,
+            link: '/manager',
+            company_id: profile?.company_id,
+            created_at: Date.now()
+          }]);
+        }
+
+        logActivity('task_status_changed', 'task', taskId, {
+          title: data[0]?.title || 'task',
+          oldStatus: tasks.find(t => t.id === taskId)?.status,
+          newStatus: newStatus
+        });
+        triggerHaptic(isComplete ? 'success' : 'light');
+        queryClient.invalidateQueries({ queryKey: ['tasks', user.id] });
+        toast.success(isStart 
+          ? (language === 'ar' ? 'تم بدء العمل على المهمة وتوثيق موقعك' : 'Task started and location documented') 
+          : (language === 'ar' ? 'تم إتمام المهمة وتوثيق موقعك' : 'Task completed and location documented')
+        );
+      } catch (err: any) {
+        triggerHaptic('error');
+        console.error('[Task Update]', err);
+        toast.error(language === 'ar' ? `خطأ: ${err.message || 'تعذر تحديث الحالة'}` : `Error: ${err.message || 'Could not update status'}`);
+      }
+    } finally {
+      setUpdatingTaskId(null);
     }
   };
 
@@ -499,15 +518,15 @@ export default function EmployeeDashboard() {
     let list = [...displayTasks];
     if (activeTab === 'active' && sortByProximity && userCoords) {
       list.sort((a, b) => {
-        const hasA = a.latitude !== undefined && a.latitude !== null && a.longitude !== undefined && a.longitude !== null;
-        const hasB = b.latitude !== undefined && b.latitude !== null && b.longitude !== undefined && b.longitude !== null;
+        const hasA = a.targetLatitude !== undefined && a.targetLatitude !== null && a.targetLongitude !== undefined && a.targetLongitude !== null;
+        const hasB = b.targetLatitude !== undefined && b.targetLatitude !== null && b.targetLongitude !== undefined && b.targetLongitude !== null;
         
         if (!hasA && !hasB) return 0;
         if (!hasA) return 1;
         if (!hasB) return -1;
         
-        const distA = calculateDistance(userCoords.latitude, userCoords.longitude, a.latitude!, a.longitude!);
-        const distB = calculateDistance(userCoords.latitude, userCoords.longitude, b.latitude!, b.longitude!);
+        const distA = calculateDistance(userCoords.latitude, userCoords.longitude, a.targetLatitude!, a.targetLongitude!);
+        const distB = calculateDistance(userCoords.latitude, userCoords.longitude, b.targetLatitude!, b.targetLongitude!);
         return distA - distB;
       });
     }
@@ -515,8 +534,8 @@ export default function EmployeeDashboard() {
   }, [displayTasks, activeTab, sortByProximity, userCoords]);
 
   const getTaskDistance = (task: Task) => {
-    if (!userCoords || !task.latitude || !task.longitude) return null;
-    return calculateDistance(userCoords.latitude, userCoords.longitude, task.latitude, task.longitude);
+    if (!userCoords || !task.targetLatitude || !task.targetLongitude) return null;
+    return calculateDistance(userCoords.latitude, userCoords.longitude, task.targetLatitude, task.targetLongitude);
   };
 
   const formatDistance = (dist: number) => {
@@ -992,17 +1011,27 @@ export default function EmployeeDashboard() {
                               {task.status === 'in_progress' ? (
                                 <button 
                                   onClick={() => handleUpdateStatus(task.id, 'completed')}
-                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none"
+                                  disabled={updatingTaskId !== null}
+                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none disabled:opacity-50"
                                 >
-                                  <CheckCircle className="w-4 h-4 animate-bounce" />
+                                  {updatingTaskId === task.id ? (
+                                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-4 h-4 animate-bounce" />
+                                  )}
                                   <span>{language === 'ar' ? 'لقد وصلت للموقع! تسجيل خروج وإتمام المهمة' : 'Arrived at site! Complete task'}</span>
                                 </button>
                               ) : (
                                 <button 
                                   onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none"
+                                  disabled={updatingTaskId !== null}
+                                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-sm animate-pulse flex items-center justify-center gap-1.5 border-none disabled:opacity-50"
                                 >
-                                  <MapPin className="w-4 h-4 animate-bounce" />
+                                  {updatingTaskId === task.id ? (
+                                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <MapPin className="w-4 h-4 animate-bounce" />
+                                  )}
                                   <span>{language === 'ar' ? 'لقد وصلت للموقع! بدء العمل' : 'Arrived at location! Start task'}</span>
                                 </button>
                               )}
@@ -1013,24 +1042,43 @@ export default function EmployeeDashboard() {
                           <div className={`flex gap-2 flex-wrap ${language === 'en' ? 'flex-row' : ''}`}>
                             {(task.status === 'new' || task.status === 'pending') && (
                               <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all cursor-pointer">
-                                <RefreshCcw className="w-3.5 h-3.5" />{language === 'ar' ? 'بدء العمل' : 'Start Task'}
+                                disabled={updatingTaskId !== null}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                {updatingTaskId === task.id ? (
+                                  <span className="w-3.5 h-3.5 border-2 border-amber-700 dark:border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <RefreshCcw className="w-3.5 h-3.5" />
+                                )}
+                                <span>{language === 'ar' ? 'بدء العمل' : 'Start Task'}</span>
                               </button>
                             )}
                             {task.status === 'in_progress' && (
                               <>
                                 <button onClick={() => handleUpdateStatus(task.id, 'completed')}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all cursor-pointer">
-                                  <CheckCircle className="w-3.5 h-3.5" />{language === 'ar' ? 'اكتمل' : 'Complete'}
+                                  disabled={updatingTaskId !== null}
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                  {updatingTaskId === task.id ? (
+                                    <span className="w-3.5 h-3.5 border-2 border-green-700 dark:border-green-400 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{language === 'ar' ? 'اكتمل' : 'Complete'}</span>
                                 </button>
                                 <button onClick={() => handleUpdateStatus(task.id, 'pending')}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all cursor-pointer">
-                                  <Hand className="w-3.5 h-3.5" />{language === 'ar' ? 'تعليق' : 'Suspend'}
+                                  disabled={updatingTaskId !== null}
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                  {updatingTaskId === task.id ? (
+                                    <span className="w-3.5 h-3.5 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Hand className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{language === 'ar' ? 'تعليق' : 'Suspend'}</span>
                                 </button>
                               </>
                             )}
                             <button onClick={() => openNotesModal(task)}
-                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer border-none ${language === 'ar' ? 'ml-auto' : 'mr-auto'}`}>
+                              disabled={updatingTaskId !== null}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50 ${language === 'ar' ? 'ml-auto' : 'mr-auto'}`}>
                               <Camera className="w-3.5 h-3.5" />{language === 'ar' ? 'صورة / ملاحظة' : 'Photo / Note'}
                             </button>
                           </div>

@@ -43,7 +43,7 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Foreign key constraints configured with `ON DELETE CASCADE` so deleting the auth user cleans up the profile entry automatically.
 * **Table `tasks`:**
   * Tracks task titles, descriptions, employee assignments, statuses, and coordinates.
-  * Fields: `start_latitude`, `start_longitude` (commence position) and `latitude`, `longitude` (completion position).
+  * Fields: `start_latitude`, `start_longitude` (commence position), `latitude`, `longitude` (completion position), and `target_latitude`, `target_longitude` (geofencing boundaries).
 * **Table `companies`:**
   * Has `is_active` (boolean) to manage tenant active/suspended status.
   * Updates to `is_active`, `name`, `slug`, `plan`, or `max_employees` are protected at the database level by the `check_company_update` trigger, restricting updates strictly to super_admins.
@@ -51,19 +51,20 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Stores payment metadata configurations: `stripe_customer_id`, `stripe_subscription_id`, `stripe_public_key`, and `stripe_webhook_secret`.
 * **Table `platform_audit_logs`:**
   * System-wide audit log mapping administrator actions, details payload (JSONB), company references, IP addresses, and user-agent metadata.
-
+ 
 ---
-
+ 
 ## 3. Last Completed Phase
-
+ 
 * **Phase 1: Security & Critical Basics:** Implemented Forgot Password flow (`ResetPassword.tsx` page and reset email trigger), database-level employee limits check trigger, verification of native push notification deployment, and confirmation dialogs for sign-out and company deactivations.
 * **Phase 2: UX & Interactivity:** Integrated KPI metrics cards for employee performance, date range filter for manager dashboards, and company settings with logo upload and storage buckets.
 * **Phase 3: Data Integrity & Offline:** Integrated offline React Query local persistence with custom Capacitor Preferences adapter and introduced audit activity logger (`useActivityLog`).
 * **Phase 4: Production Hardening & Dashboard Unification (completed):** Resolved company types mismatch, fixed React Modal nesting bugs in Employee/Manager dashboards, enabled PWA Service Worker. Refactored Manager Dashboard to route mobile and desktop views directly into a single responsive `TasksTable` component, and replaced the status filters dropdown with a premium bilingual Segmented Button Group controller.
 * **Phase 5: Future Growth, Multi-language & App Delivery (completed):** Verified Landing Page routing, implemented translation context with dynamic RTL/LTR layout switcher. Expanded with Notification Center, Biometrics Auth, Deep Linking, Offline Maps, and PDF Sharing sheets. Redesigned the Landing Page download section to offer Android APK installation steps, an interactive iOS Safari PWA guide, and an SVG-rendered QR Code. Implemented Apple-compliant "Delete Account" Danger Zone in Profile Settings with double-confirmation, invoking the `delete_own_user` DB RPC before sign-out.
 * **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting and `ErrorBoundary.tsx`. Integrated `@capacitor/haptics` tactile feedback.
+* **Phase 8: Geofencing Realignment & UX Hardening (v1.5.0) (completed):** Created `target_latitude` and `target_longitude` fields in the database schema. Updated core interfaces and `useTasks` mapping hooks. Integrated Geofencing inputs and "Use Current Location" GPS getters inside the manager's Task Modal. Upgraded the employee dashboard to measure proximity against target coordinates instead of completion coordinates, locked concurrent task update triggers to prevent double-check-in race conditions, rate-limited startup update checks to 24 hours, and built automatic chunk load failure recovery.
+* **Phase 9: Security Hardening & Isolation (v1.6.0) (completed):** Implemented database-level triggers and RLS policies to prevent role escalation on profile inserts (`check_user_insert`), task details tampering by employees (`check_task_update`), employee impersonation in visits (`visits_insert_policy`), activity log spoofing (`activity_log_insert_policy`), and cross-tenant information leaks (hardened `companies` and storage buckets RLS constraints).
 * **Build Verification:** Successfully compiled the entire client bundle with zero errors via `npx tsc --noEmit` and Vite production build (`npm run build`).
-* **Phase 7: SaaS Platform & Super Admin Optimizations (completed):** Created platform audit logs SQL schema with strict RLS policies. Updated `create-user` Edge Function to handle `create_manager_for_company` with JWT validation and secure random password generation, eliminating orphaned companies. Implemented Stripe Billing configuration panel and mock Webhook simulator in the frontend Super Admin dashboard.
 
 ---
 

@@ -26,7 +26,10 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
     location: '',
     status: 'new' as TaskStatus,
     dueDate: '',
+    targetLatitude: '',
+    targetLongitude: '',
   });
+  const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -39,6 +42,8 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
         location: task.location || '',
         status: task.status,
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+        targetLatitude: task.targetLatitude !== undefined && task.targetLatitude !== null ? task.targetLatitude.toString() : '',
+        targetLongitude: task.targetLongitude !== undefined && task.targetLongitude !== null ? task.targetLongitude.toString() : '',
       });
     } else {
       setFormData({
@@ -48,11 +53,31 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
         location: '',
         status: 'new',
         dueDate: '',
+        targetLatitude: '',
+        targetLongitude: '',
       });
     }
   }, [task, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleAutoLocate = async () => {
+    setIsLocating(true);
+    try {
+      const { getNativeLocation } = await import('../lib/nativeServices');
+      const loc = await getNativeLocation();
+      setFormData(prev => ({
+        ...prev,
+        targetLatitude: loc.latitude.toFixed(6),
+        targetLongitude: loc.longitude.toFixed(6)
+      }));
+      toast.success(language === 'ar' ? 'تم جلب موقعك الحالي كإحداثيات مستهدفة!' : 'Current location loaded as target coordinates!');
+    } catch (err: any) {
+      toast.error(err.message || (language === 'ar' ? 'فشل جلب الموقع الجغرافي' : 'Failed to retrieve location'));
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +85,9 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
     
     // Parse the date and set time to noon to avoid timezone shift issues
     const dueDateTimestamp = formData.dueDate ? new Date(`${formData.dueDate}T12:00:00`).getTime() : null;
+
+    const targetLatitudeNum = formData.targetLatitude ? parseFloat(formData.targetLatitude) : null;
+    const targetLongitudeNum = formData.targetLongitude ? parseFloat(formData.targetLongitude) : null;
 
     try {
       if (task) {
@@ -73,6 +101,8 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
             location: formData.location,
             status: formData.status,
             due_date: dueDateTimestamp,
+            target_latitude: targetLatitudeNum,
+            target_longitude: targetLongitudeNum,
             updated_at: Date.now()
           })
           .eq('id', task.id);
@@ -93,6 +123,8 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
             due_date: dueDateTimestamp,
             created_by: currentUserId,
             company_id: profile?.company_id,
+            target_latitude: targetLatitudeNum,
+            target_longitude: targetLongitudeNum,
             created_at: Date.now(),
             updated_at: Date.now()
           }])
@@ -193,6 +225,49 @@ export default function TaskModal({ isOpen, onClose, task, employees, currentUse
                       className="w-full border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border outline-none transition" 
                     />
                   </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      {language === 'ar' ? 'إحداثيات السياج الجغرافي (اختياري)' : 'Geofence Coordinates (Optional)'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAutoLocate}
+                      disabled={isLocating}
+                      className="text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      📍 {isLocating ? (language === 'ar' ? 'جاري التحديد...' : 'Locating...') : (language === 'ar' ? 'تحديد موقعي الحالي' : 'Use Current Location')}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <input 
+                        type="number" 
+                        step="any"
+                        placeholder={language === 'ar' ? 'خط العرض (Latitude)' : 'Latitude'}
+                        value={formData.targetLatitude}
+                        onChange={e => setFormData({...formData, targetLatitude: e.target.value})}
+                        className="w-full border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border outline-none transition" 
+                      />
+                    </div>
+                    <div>
+                      <input 
+                        type="number" 
+                        step="any"
+                        placeholder={language === 'ar' ? 'خط الطول (Longitude)' : 'Longitude'}
+                        value={formData.targetLongitude}
+                        onChange={e => setFormData({...formData, targetLongitude: e.target.value})}
+                        className="w-full border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border outline-none transition" 
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1 mb-0">
+                    {language === 'ar' 
+                      ? 'يسمح بتحديد نطاق وصول الموظف لمسافة 100 متر حول الموقع قبل تمكينه من تسجيل الدخول.' 
+                      : 'Enables verification of employee arrival within 100m before they check-in.'}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

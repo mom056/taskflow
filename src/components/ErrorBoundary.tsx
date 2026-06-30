@@ -26,6 +26,26 @@ class ErrorBoundaryClass extends Component<Props & { t: any; language: string; i
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught exception:', error, errorInfo);
     
+    // Check for chunk load error (failed dynamic imports after a new build deployment)
+    const isChunkError = 
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.name === 'ChunkLoadError' ||
+      error.message?.includes('Loading chunk') ||
+      error.message?.includes('dynamically imported');
+
+    if (isChunkError) {
+      const now = Date.now();
+      const lastReload = sessionStorage.getItem('last_chunk_reload');
+      // Force a hard reload only if we haven't reloaded in the last 15 seconds to prevent loop
+      if (!lastReload || now - parseInt(lastReload, 10) > 15000) {
+        sessionStorage.setItem('last_chunk_reload', now.toString());
+        console.warn('[ErrorBoundary] Chunk load error detected. Performing automatic page reload...');
+        window.location.reload();
+        return;
+      }
+      console.error('[ErrorBoundary] Repeated chunk load error. Halting auto-reload to prevent loop.');
+    }
+    
     // Capture error in Sentry
     Sentry.captureException(error, { extra: { errorInfo } });
     
