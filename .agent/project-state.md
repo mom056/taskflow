@@ -26,13 +26,21 @@ This file maintains the current structural and functional state of the TaskFlow 
   * Uses a dynamic inline **Segmented Control Bar** to switch between active and completed tasks with live counters (instead of the old 4 bulky KPI grid cards).
   * Proximity-based sorting ("الأقرب إليّ") to order tasks based on Haversine distance from the user's GPS coordinates.
   * Geofence arrival detection (pulsing glow + check-in triggers) and swipe gestures to start/complete tasks.
+  * Renders the `AttendanceCard` and triggers for `LeaveRequestModal` and `VisitModal`.
+* **Attendance & Field Visits Module (`v2.0.0`):**
+  * **Attendance Card (`src/components/AttendanceCard.tsx` & `useAttendance.ts`):** Employee check-in/out with automated office vs field categorization using GPS-based geofence calculation.
+  * **Field Visit Modal (`src/components/VisitModal.tsx` & `useVisits.ts`):** Documenting visits with coordinate capture and verification image uploads under custom RLS rules.
+  * **Leave Requests Modal (`src/components/LeaveRequestModal.tsx` & `useLeaveRequests.ts`):** Interactive excuse and leave request applications.
+  * **Manager Auditing Panels (`src/components/AttendanceTable.tsx` & `src/components/LeaveRequestsPanel.tsx`):** Grid/list panels mounted inside `ManagerDashboard.tsx` for monitoring, reviewing, and exporting attendance and leave requests.
 * **Native Services (`src/lib/nativeServices.ts`):**
   * Core integration for Capacitor plugins (Geolocation, Browser, etc.).
   * Resilient multi-tier geolocation tracking.
+  * Support for native photo capturing via Capacitor Camera.
 * **User Management Edge Function (`supabase/functions/create-user/index.ts`):**
   * Secure administrative backend running on Deno.
   * Supports actions: `create`, `update`, `delete`.
   * Company ownership check prevents unauthorized cross-tenant mutations.
+
 
 ---
 
@@ -64,6 +72,7 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Phase 6: Final Verification & Audit (completed):** Configured Sentry crash reporting and `ErrorBoundary.tsx`. Integrated `@capacitor/haptics` tactile feedback.
 * **Phase 8: Geofencing Realignment & UX Hardening (v1.5.0) (completed):** Created `target_latitude` and `target_longitude` fields in the database schema. Updated core interfaces and `useTasks` mapping hooks. Integrated Geofencing inputs and "Use Current Location" GPS getters inside the manager's Task Modal. Upgraded the employee dashboard to measure proximity against target coordinates instead of completion coordinates, locked concurrent task update triggers to prevent double-check-in race conditions, rate-limited startup update checks to 24 hours, and built automatic chunk load failure recovery.
 * **Phase 9: Security Hardening & Isolation (v1.6.0) (completed):** Implemented database-level triggers and RLS policies to prevent role escalation on profile inserts (`check_user_insert`), task details tampering by employees (`check_task_update`), employee impersonation in visits (`visits_insert_policy`), activity log spoofing (`activity_log_insert_policy`), and cross-tenant information leaks (hardened `companies` and storage buckets RLS constraints).
+* **Phase 10: Attendance, Visits, and Leave Management (v2.0.0) (completed):** Built full offline-first workflow for check-in/out, lateness automated server calculation, geofencing office/field verification, coordinate audits, leave requests panel, and field visit logs. Refactored mobile bottom navigation with drawer-based menus to support >5 items and direct profile settings routing.
 * **Build Verification:** Successfully compiled the entire client bundle with zero errors via `npx tsc --noEmit` and Vite production build (`npm run build`).
 
 ---
@@ -84,6 +93,7 @@ This file maintains the current structural and functional state of the TaskFlow 
 
 ## 5. Future Architectural Directions
 
+* **High-Fidelity PDF/Report Generation:** Migrate from client-side `jsPDF` custom font reverse character rendering to either a Backend PDF Generation service (e.g. Supabase Edge Function utilizing Puppeteer/Typst) or a native Capacitor print layout engine. This resolves browser-based Arabic RTL and letter-ligation (shaping) limitations natively.
 * **Universal Links / App Links:** Transition custom schemes to verified Universal Links (`https://taskflow.com/...`) by deploying domain association files (`apple-app-site-association` and `assetlinks.json`) to prevent deep link hijacking and ensure standard web fallback routing.
 * **Conflict Resolution Strategy:** Formulate concrete merging paradigms (e.g. Last-Write-Wins or user-facing change conflict dialogue) for the offline synchronizer queue when scale reaches millions of concurrent edits.
 * **Telemetry Control:** Restructure the Sentry initialization parameters in production environments to cap reporting rates (e.g., set `tracesSampleRate: 0.1` or lower) and mitigate bandwidth/infrastructure telemetry bills.
@@ -113,4 +123,8 @@ This file maintains the current structural and functional state of the TaskFlow 
 * **Platform Audit Logs Schema Migration:**
   * **File:** `supabase/migrations/20260630120000_platform_audit_logs.sql`
   * **Description:** Provisions the `platform_audit_logs` table, establishes Stripe key placeholder fields on `companies`, and configures row-level security (RLS) allowing only `super_admin` access to the audit trails.
+* **Attendance, Visits, & Leave Management Migration:**
+  * **File:** `supabase/migrations/20260630150000_attendance_system.sql`
+  * **Description:** Sets up the core database structure for attendance records, leave requests, and field visits. Configures Riyadh (UTC+3) schedules, automated lateness calculations, proximity geofence validation functions, and strict row-level security (RLS) policies.
+
 
