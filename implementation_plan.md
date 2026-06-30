@@ -778,6 +778,21 @@ Complete redesign of the Landing Page to reflect Phase 10 features and eliminate
 
 ---
 
+### Component 4: Theme & Color Contrast Tweaks
+
+#### [MODIFY] [index.css](file:///d:/CP+/taskflow/src/index.css)
+- Add `.bg-white-forced` and `.text-slate-900-forced` utility classes to bypass the global `.dark` color-override styles for components that must remain high-contrast.
+- Clean up scrollbar theme rules to adapt smoothly to dark and light background states.
+
+#### [MODIFY] [LandingPage.tsx](file:///d:/CP+/taskflow/src/pages/LandingPage.tsx)
+- Wrap the QR Code container with `style={{ backgroundColor: '#ffffff' }}` or `.bg-white-forced` to ensure it is always 100% white and easily scannable on all devices.
+- Hardcode the Landing Page UI elements to static Slate colors to shield them from getting messed up by the global `.dark` classes when logged out.
+
+#### [MODIFY] [WeeklyPerformanceChart.tsx](file:///d:/CP+/taskflow/src/components/charts/WeeklyPerformanceChart.tsx) (and other Recharts instances)
+- Apply adaptive text colors to Recharts `<XAxis />`, `<YAxis />`, and `<Tooltip />` labels to ensure absolute readability when switching between light and dark themes.
+
+---
+
 ## Verification Plan
 
 ### Manual Verification

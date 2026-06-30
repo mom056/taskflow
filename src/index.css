@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --font-outfit: "Outfit", ui-sans-serif, system-ui, sans-serif;
 }
 
 @utility safe-pt {
@@ -243,4 +244,35 @@ body {
 }
 .dark .workday-path-line::before {
   background-image: linear-gradient(to right, #475569 50%, rgba(0, 0, 0, 0) 0%);
+}
+
+/* Forced Color Utilities to bypass global .dark overrides */
+.bg-white-forced {
+  background-color: #ffffff !important;
+}
+.text-slate-900-forced {
+  color: #0f172a !important;
+}
+
+/* Custom premium scrollbar style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.25);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.45);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.3);
 }

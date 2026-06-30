@@ -4,6 +4,7 @@ import { Task } from '../../types';
 import { startOfDay, subDays, format, isSameDay } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface WeeklyPerformanceChartProps {
   tasks: Task[];
@@ -11,6 +12,8 @@ interface WeeklyPerformanceChartProps {
 
 export default function WeeklyPerformanceChart({ tasks }: WeeklyPerformanceChartProps) {
   const { language } = useTranslation();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   const chartData = useMemo(() => {
     const completedTasks = tasks.filter(t => t.status === 'completed' && t.updatedAt);
@@ -36,6 +39,15 @@ export default function WeeklyPerformanceChart({ tasks }: WeeklyPerformanceChart
 
   const keyName = language === 'ar' ? 'المهام المنجزة' : 'Completed Tasks';
 
+  // Dynamic colors matching obsidian/slate dashboard aesthetics
+  const colors = {
+    grid: isDark ? '#334155' : '#f1f5f9',
+    ticks: isDark ? '#94a3b8' : '#64748b',
+    tooltipBg: isDark ? '#0f172a' : '#ffffff',
+    tooltipBorder: isDark ? '#334155' : '#e2e8f0',
+    tooltipText: isDark ? '#f1f5f9' : '#0f172a',
+  };
+
   return (
     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
       <div>
@@ -57,17 +69,17 @@ export default function WeeklyPerformanceChart({ tasks }: WeeklyPerformanceChart
                 <stop offset="95%" stopColor="#2563eb" stopOpacity={0.01}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={colors.grid} />
             <XAxis 
               dataKey="name" 
               tickLine={false} 
               axisLine={false} 
-              tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'system-ui' }} 
+              tick={{ fill: colors.ticks, fontSize: 10, fontFamily: 'system-ui' }} 
             />
             <YAxis 
               tickLine={false} 
               axisLine={false} 
-              tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'system-ui' }} 
+              tick={{ fill: colors.ticks, fontSize: 10, fontFamily: 'system-ui' }} 
               allowDecimals={false}
               orientation={language === 'ar' ? 'right' : 'left'}
             />
@@ -76,7 +88,9 @@ export default function WeeklyPerformanceChart({ tasks }: WeeklyPerformanceChart
                 direction: language === 'ar' ? 'rtl' : 'ltr', 
                 textAlign: language === 'ar' ? 'right' : 'left', 
                 borderRadius: '12px', 
-                border: '1px solid #e2e8f0',
+                backgroundColor: colors.tooltipBg,
+                border: `1px solid ${colors.tooltipBorder}`,
+                color: colors.tooltipText,
                 boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                 fontFamily: 'system-ui',
                 fontSize: '12px'
