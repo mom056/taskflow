@@ -112,7 +112,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v2.0.7'; // current build version
+        const localVersion = 'v2.0.8'; // current build version
 
         // Record check timestamp
         localStorage.setItem('last_version_check_time', now.toString());
@@ -671,9 +671,9 @@ export default function EmployeeDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile header */}
-        <header className="md:hidden bg-white border-b border-slate-100 px-4 pb-3 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-xs">
-          <Link to="/profile" className="flex items-center gap-3 text-slate-800 decoration-none no-underline">
-            <div className="w-8 h-8 bg-linear-to-br from-blue-50 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100 shrink-0">
+        <header className="md:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-100 dark:border-slate-800/80 px-4 pb-3.5 safe-pt flex items-center justify-between sticky top-0 z-20 shadow-xs">
+          <Link to="/profile" className="flex items-center gap-3 text-slate-800 dark:text-slate-100 decoration-none no-underline">
+            <div className="w-8 h-8 bg-linear-to-br from-blue-50 to-blue-700 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden border border-blue-100 dark:border-slate-800 shrink-0">
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="User" className="w-full h-full object-cover" />
               ) : (
@@ -681,24 +681,24 @@ export default function EmployeeDashboard() {
               )}
             </div>
             <div>
-              <div className="text-sm font-bold flex items-center gap-1.5">
+              <div className="text-sm font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
                 {activeTab === 'active' ? (language === 'ar' ? 'مهامي النشطة' : 'My Active Tasks') : (language === 'ar' ? 'المنجزة' : 'Completed')}
                 {!isOnline && (
-                  <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                  <span className="inline-flex items-center gap-0.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
                     <CloudOff className="w-2.5 h-2.5" />
                     {queueLength > 0 ? (language === 'ar' ? `${queueLength} معلقة` : `${queueLength} pending`) : (language === 'ar' ? 'أوفلاين' : 'Offline')}
                   </span>
                 )}
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">
                 {profile?.name || user?.email?.split('@')[0]} {company ? `| ${company.name}` : ''}
               </div>
             </div>
           </Link>
           <div className="flex items-center gap-2">
             <NotificationCenter />
-            <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 rounded-full cursor-pointer border-none bg-transparent">
-              <LogOut className="w-4 h-4 text-slate-500" />
+            <button onClick={() => setLogoutConfirmOpen(true)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full cursor-pointer border-none bg-transparent">
+              <LogOut className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             </button>
           </div>
         </header>
@@ -818,92 +818,97 @@ export default function EmployeeDashboard() {
                 addToQueue={addToQueue}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setVisitModalOpen(true)}
-                  className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-colors cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
                 >
-                  <Briefcase className="w-4 h-4 text-blue-600" />
-                  <span>تسجيل زيارة ميدانية</span>
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <Briefcase className="w-5 h-5" />
+                  </div>
+                  <span>{language === 'ar' ? 'تسجيل زيارة ميدانية' : 'Register Field Visit'}</span>
                 </button>
                 <button
                   onClick={() => setLeaveModalOpen(true)}
-                  className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-colors cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
                 >
-                  <CalendarDays className="w-4 h-4 text-purple-600" />
-                  <span>طلب إجازة / إذن مغادرة</span>
-                </button>
-              </div>
-
-            {/* Segmented Control Bar for active / completed filters inside content */}
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
-              <div className="flex border border-slate-200 dark:border-slate-700/60 rounded-xl p-1 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto shrink-0 select-none w-full sm:w-auto">
-                {([
-                  { id: 'active', label: language === 'ar' ? 'مهام نشطة' : 'Active Tasks', count: activeTasks.length },
-                  { id: 'completed', label: language === 'ar' ? 'مهام منجزة' : 'Completed Tasks', count: completedTasks.length },
-                ] as const).map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
-                      activeTab === item.id
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-transparent'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
-                      activeTab === item.id
-                        ? 'bg-white/20 text-white'
-                        : 'bg-slate-200/60 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                    }`}>
-                      {item.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Notification Banner */}
-            {!isCheckingPush && !isSubscribed && permission !== 'granted' && isOnline && (
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">📢</span>
-                  <div>
-                    <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">{language === 'ar' ? 'تفعيل إشعارات المهام المباشرة' : 'Enable Live Push Notifications'}</h4>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                      {language === 'ar' 
-                        ? 'تلقى تنبيهات فورية على هاتفك بمجرد تكليفك بمهام أو زيارات جديدة من المدير.'
-                        : 'Get instant notification on your device when a manager assigns you new tasks or visits.'}
-                    </p>
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+                    <CalendarDays className="w-5 h-5" />
                   </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await subscribeUser();
-                      toast.success(language === 'ar' ? 'تم تفعيل الإشعارات بنجاح!' : 'Notifications enabled successfully!');
-                    } catch (err: any) {
-                      setPermissionGuideType('push');
-                      setIsPermissionGuideOpen(true);
-                      toast.error(err.message || (language === 'ar' ? 'فشل تفعيل الإشعارات' : 'Could not enable notifications'));
-                    }
-                  }}
-                  disabled={isSubscribing}
-                  className="bg-blue-600 text-white border-none px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {isSubscribing ? (language === 'ar' ? 'جاري التفعيل...' : 'Activating...') : (language === 'ar' ? 'تفعيل الآن' : 'Enable Now')}
+                  <span>{language === 'ar' ? 'طلب إجازة / إذن مغادرة' : 'Leave / Exit Permit'}</span>
                 </button>
               </div>
-            )}
 
-            {/* Mobile add button */}
-            <div className="flex md:hidden justify-end">
-              <button onClick={() => setTaskFormOpen(true)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none">
-                <PlusCircle className="w-4 h-4" />{language === 'ar' ? 'مهمة جديدة' : 'New Task'}
+              {/* Segmented Control Bar for active / completed filters inside content */}
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-slate-800 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
+                <div className="flex rounded-xl p-1 bg-slate-100 dark:bg-slate-900/60 overflow-x-auto shrink-0 select-none w-full sm:w-auto">
+                  {([
+                    { id: 'active', label: language === 'ar' ? 'مهام نشطة' : 'Active Tasks', count: activeTasks.length },
+                    { id: 'completed', label: language === 'ar' ? 'مهام منجزة' : 'Completed Tasks', count: completedTasks.length },
+                  ] as const).map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                        activeTab === item.id
+                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs border border-slate-200/40 dark:border-slate-700/30'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-transparent'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                        activeTab === item.id
+                          ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                          : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {item.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notification Banner */}
+              {!isCheckingPush && !isSubscribed && permission !== 'granted' && isOnline && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">📢</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">{language === 'ar' ? 'تفعيل إشعارات المهام المباشرة' : 'Enable Live Push Notifications'}</h4>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                        {language === 'ar' 
+                          ? 'تلقى تنبيهات فورية على هاتفك بمجرد تكليفك بمهام أو زيارات جديدة من المدير.'
+                          : 'Get instant notification on your device when a manager assigns you new tasks or visits.'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await subscribeUser();
+                        toast.success(language === 'ar' ? 'تم تفعيل الإشعارات بنجاح!' : 'Notifications enabled successfully!');
+                      } catch (err: any) {
+                        setPermissionGuideType('push');
+                        setIsPermissionGuideOpen(true);
+                        toast.error(err.message || (language === 'ar' ? 'فشل تفعيل الإشعارات' : 'Could not enable notifications'));
+                      }
+                    }}
+                    disabled={isSubscribing}
+                    className="bg-blue-600 text-white border-none px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isSubscribing ? (language === 'ar' ? 'جاري التفعيل...' : 'Activating...') : (language === 'ar' ? 'تفعيل الآن' : 'Enable Now')}
+                  </button>
+                </div>
+              )}
+
+              {/* Mobile Floating Action Button (FAB) */}
+              <button 
+                onClick={() => setTaskFormOpen(true)}
+                className={`fixed bottom-24 ${language === 'ar' ? 'left-6' : 'right-6'} md:hidden z-30 w-14 h-14 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all border-none cursor-pointer`}
+                title={language === 'ar' ? 'مهمة جديدة' : 'New Task'}
+              >
+                <PlusCircle className="w-6 h-6" />
               </button>
-            </div>
 
             {/* Interactive Workday Path */}
             {activeTab === 'active' && workdayTasks.length > 0 && (
@@ -1137,33 +1142,33 @@ export default function EmployeeDashboard() {
       </main>
 
       {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex md:hidden z-30 shadow-[0_-2px_16px_rgba(0,0,0,0.06)] safe-pb" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-800/80 flex md:hidden z-30 shadow-[0_-2px_20px_rgba(0,0,0,0.06)] safe-pb" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         <button onClick={() => setActiveTab('active')}
-          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'active' ? 'text-blue-600' : 'text-slate-400'}`}>
-          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'active' ? 'bg-blue-50' : ''}`}>
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'active' ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'active' ? 'bg-blue-50 dark:bg-blue-950/40' : ''}`}>
             <ClipboardList className="w-5 h-5" />
           </div>
-          <span className="text-[10px] font-semibold">{language === 'ar' ? 'نشطة' : 'Active'}</span>
+          <span className="text-[10px]">{language === 'ar' ? 'نشطة' : 'Active'}</span>
         </button>
 
         <button onClick={() => setActiveTab('completed')}
-          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'completed' ? 'text-blue-600' : 'text-slate-400'}`}>
-          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'completed' ? 'bg-blue-50' : ''}`}>
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent ${activeTab === 'completed' ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'completed' ? 'bg-blue-50 dark:bg-blue-950/40' : ''}`}>
             <CheckSquare className="w-5 h-5" />
           </div>
-          <span className="text-[10px] font-semibold">{language === 'ar' ? 'المنجزة' : 'Completed'}</span>
+          <span className="text-[10px]">{language === 'ar' ? 'المنجزة' : 'Completed'}</span>
         </button>
 
         <Link to="/profile"
-          className="flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent text-slate-400 decoration-none no-underline">
-          <div className="w-7 h-7 rounded-full border border-slate-200 hover:border-blue-500 transition-colors flex items-center justify-center overflow-hidden bg-slate-50">
+          className="flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-all cursor-pointer border-none bg-transparent text-slate-400 dark:text-slate-500 decoration-none no-underline">
+          <div className="w-7 h-7 rounded-full border border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-800">
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover rounded-full" />
             ) : (
-              <span className="text-[11px] font-bold text-slate-600">{avatar}</span>
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{avatar}</span>
             )}
           </div>
-          <span className="text-[10px] font-semibold text-slate-400">{language === 'ar' ? 'ملفي' : 'Profile'}</span>
+          <span className="text-[10px]">{language === 'ar' ? 'ملفي' : 'Profile'}</span>
         </Link>
       </nav>
 

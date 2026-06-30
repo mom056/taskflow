@@ -233,7 +233,7 @@ export default function AttendanceCard({
           {/* Notes area */}
           <div>
             <textarea
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-400 text-sm focus:outline-none focus:border-indigo-500/50 transition-all resize-none"
+              className="w-full px-4 py-3 bg-white/10 border border-white/15 rounded-2xl text-white placeholder-white/50 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all resize-none"
               placeholder="إضافة ملاحظة عند الحضور (اختياري)..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
