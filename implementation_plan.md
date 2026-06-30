@@ -661,3 +661,129 @@ type: "create_task" |
 > 1. هل تريد أن يكون تسجيل الحضور **إجبارياً** قبل بدء أي مهمة؟ (أي لا يستطيع الموظف بدء مهمة إلا بعد تسجيل حضوره)
 > 2. هل تريد تحديد عدد أيام الإجازات السنوية المسموحة لكل موظف في النظام؟
 > 3. هل تريد إضافة خيار "العمل عن بُعد" (Remote) كنوع ثالث للحضور؟
+
+# Landing Page Redesign — Corrected Plan
+
+Complete redesign of the Landing Page to reflect Phase 10 features and eliminate the generic AI-template aesthetic, while maintaining **strict brand consistency** with the rest of the application.
+
+---
+
+## Critical Design Corrections (vs. Previous Plan)
+
+> [!WARNING]
+> The previous plan had 3 architectural flaws that would have caused brand inconsistency and maintenance burden. All three are corrected below.
+
+| Issue             | Previous Plan (Wrong)                                  | Corrected Plan                                                                                     |
+| ----------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| **Typography**    | Switch to Almarai for Landing only                     | Keep **Tajawal** globally (it's already the app's unified font in `index.css`)                     |
+| **Color Palette** | Switch to Mint/Cyan (green-dominant)                   | Keep **Blue (#2563eb)** as primary brand color, but refine usage to feel premium and human-crafted |
+| **Simulators**    | Complex interactive state machines (GPS, offline, PDF) | Beautiful **static visual mockups** with simple CSS hover/transition effects only                  |
+
+---
+
+## Design Philosophy: "Handcrafted, Not Generated"
+
+### What makes a page look "AI-generated":
+
+1. ❌ Perfectly symmetrical 3-column grids with identical card sizes
+2. ❌ Overuse of gradient text (`bg-clip-text text-transparent`)
+3. ❌ Neon-glow borders and excessive `animate-pulse`
+4. ❌ Generic emoji-heavy section headers
+5. ❌ Dot-grid background patterns
+
+### What makes a page look "Custom premium":
+
+1. ✅ **Asymmetric Bento Grid** — Cards of different sizes creating visual hierarchy
+2. ✅ **Refined typography** — Mix of font weights (300/400/700/800) with generous letter-spacing
+3. ✅ **Restrained color** — One accent color used sparingly, large areas of neutral white space or dark slate
+4. ✅ **Real product screenshots or high-fidelity static mockups** — Not animated simulations
+5. ✅ **Clean borders** — Ultra-thin `1px` borders with `slate-200/30` opacity, no glows
+6. ✅ **Subtle motion** — Only `hover:translate-y` and `transition-all duration-300`, no pulsing/pinging
+
+---
+
+## Proposed Changes
+
+### Component 1: Global Typography Refinement
+
+#### [MODIFY] [index.css](file:///d:/CP+/taskflow/src/index.css)
+
+- Import additional Tajawal weights (300 light, 800 extra-bold) for typographic variety
+- Add a `.landing-heading` utility class using `font-weight: 800; letter-spacing: -0.025em` for premium headline feel
+- Add `.landing-body` with `font-weight: 400; line-height: 1.75` for readable body text
+
+---
+
+### Component 2: Landing Page Complete Rewrite
+
+#### [MODIFY] [LandingPage.tsx](file:///d:/CP+/taskflow/src/pages/LandingPage.tsx)
+
+**Section 1 — Hero (Asymmetric Layout):**
+
+- Left/Right split (not centered text block)
+- Left side: Bold headline + subtitle + 2 CTA buttons (stacked vertically on mobile)
+- Right side: A floating, slightly rotated product screenshot/mockup of the Manager Dashboard
+- Background: Clean solid `bg-slate-950` — NO dot grids, NO radial gradients, NO blur orbs
+- Subtle trust indicators below CTAs: "100+ شركة تستخدم TaskFlow" with small avatar stack
+
+**Section 2 — Bento Grid Features (Asymmetric):**
+
+- 2×3 grid with varying cell sizes:
+  - **Cell A (span-2 wide):** GPS Geofence Attendance — Shows a static mockup of an employee checking in with coordinates displayed and "✓ داخل النطاق الجغرافي" badge
+  - **Cell B (span-1):** Offline Mode — Shows a static phone mockup with a "لا يوجد اتصال" banner and queued items count
+  - **Cell C (span-1):** Photo Verification — Shows a camera viewfinder frame with a timestamp overlay
+  - **Cell D (span-2 wide):** PDF Report Export — Shows a static print-preview of a beautifully formatted Arabic report with Cairo font, company header, and tabular data
+- Each cell has a clean border, subtle background tint matching the feature color, and a hover scale effect
+
+**Section 3 — How It Works (Horizontal Timeline):**
+
+- Clean 4-step horizontal timeline with numbered circles connected by lines
+- Steps: تكليف → وصول GPS → توثيق بالصور → تقرير PDF
+- Minimal icons, clean text, no emoji
+
+**Section 4 — Manager vs Employee Views:**
+
+- Side-by-side static mockups:
+  - Left: Desktop browser frame showing Manager Dashboard with attendance table, charts, and export buttons
+  - Right: Mobile phone frame showing Employee app with check-in card, visit log, and leave request button
+- Clean browser/phone bezels with realistic proportions
+
+**Section 5 — Download App Section:**
+
+- Keep the existing platform tabs (Android APK / iOS PWA) with QR code
+- Restyle tab buttons to use solid fills instead of glow borders
+- Simplify step instructions
+
+**Section 6 — CTA Section:**
+
+- Full-width solid blue banner (`bg-blue-600`) — NO gradients
+- Clean white text, 2 buttons (primary white, secondary outlined)
+
+**Section 7 — Footer:**
+
+- Minimal footer with copyright and version number
+
+---
+
+### Component 3: Translation Updates
+
+#### [MODIFY] [ar.ts](file:///d:/CP+/taskflow/src/locales/ar.ts)
+
+- Update `landing.subtitle` to a more professional tagline
+- Add new keys for Bento Grid cell titles and descriptions
+
+#### [MODIFY] [en.ts](file:///d:/CP+/taskflow/src/locales/en.ts)
+
+- Mirror Arabic translation updates
+
+---
+
+## Verification Plan
+
+### Manual Verification
+
+1. Open Landing Page on **desktop** (1440px) → verify Bento Grid renders asymmetrically
+2. Open on **mobile** (375px) → verify all cells stack properly in single column
+3. Navigate from Landing → Login → Dashboard → verify **font and color consistency** across all transitions
+4. Verify Arabic RTL layout renders correctly with proper text alignment
+5. Test the APK download link on the Download section
