@@ -112,7 +112,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v2.0.3'; // current build version
+        const localVersion = 'v2.0.4'; // current build version
 
         // Record check timestamp
         localStorage.setItem('last_version_check_time', now.toString());
