@@ -75,7 +75,7 @@ export const en: TranslationType = {
     noAccount: 'Don’t have an account? Register company',
     haveAccount: 'Already have an account? Sign In',
     invalidEmail: 'Please enter a valid email address',
-    passwordLength: 'Password must be at least 6 characters long',
+    passwordLength: 'Password must be at least 10 characters long',
     signInSuccess: 'Successfully signed in',
     signUpSuccess: 'Account successfully created',
   },

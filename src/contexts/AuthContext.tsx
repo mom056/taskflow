@@ -31,7 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserProfile; role: Role; company: Company | null }> {
   const { data, error } = await supabase
     .from('users')
-    .select('*, company:companies(*)')
+    .select('*, company:companies(id, name, slug, logo_url, plan, max_employees, is_active, hq_latitude, hq_longitude, hq_radius_meters, work_start_time, work_end_time, work_days, created_at)')
     .eq('id', sessionUser.id)
     .maybeSingle();
 
@@ -52,18 +52,23 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
   const metadata = sessionUser.user_metadata || {};
   const companyName = metadata.company_name;
 
-  // Check how many users exist in the system via RPC to bypass RLS limits
-  const { data: userCount, error: countErr } = await supabase.rpc('get_user_count');
-  if (countErr) {
-    console.error('[Auth] Failed to get user count:', countErr.message);
-  }
-  const count = userCount !== null ? Number(userCount) : null;
-
   let newRole: Role = 'employee';
   let companyId = '';
   let companyData: Company | null = null;
 
-  if (count === 0) {
+  // Query companies to check if this is the first registration
+  const { data: existingCompanies, error: compFetchErr } = await supabase
+    .from('companies')
+    .select('*')
+    .limit(1);
+
+  if (compFetchErr) {
+    console.error('[Auth] Failed to check existing companies:', compFetchErr.message);
+  }
+
+  const hasCompanies = existingCompanies && existingCompanies.length > 0;
+
+  if (!hasCompanies) {
     // 1st user is platform super_admin
     newRole = 'super_admin';
   } else if (companyName) {
@@ -74,12 +79,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
   // Handle company association/creation
   if (newRole === 'super_admin' || !companyName) {
     // Link to default or create default company
-    const { data: existingCompanies } = await supabase
-      .from('companies')
-      .select('*')
-      .limit(1);
-
-    if (!existingCompanies || existingCompanies.length === 0) {
+    if (!hasCompanies) {
       const { data: defaultCompany, error: compErr } = await supabase
         .from('companies')
         .insert([{
@@ -140,7 +140,7 @@ async function fetchOrCreateProfile(sessionUser: User): Promise<{ profile: UserP
     // In case of parallel execution race condition, retry fetch
     const { data: retry } = await supabase
       .from('users')
-      .select('*, company:companies(*)')
+      .select('*, company:companies(id, name, slug, logo_url, plan, max_employees, is_active, hq_latitude, hq_longitude, hq_radius_meters, work_start_time, work_end_time, work_days, created_at)')
       .eq('id', sessionUser.id)
       .maybeSingle();
     

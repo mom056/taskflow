@@ -46,8 +46,8 @@ export default function ResetPassword() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword.length < 6) {
-      return toast.error(language === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters');
+    if (newPassword.length < 10) {
+      return toast.error(language === 'ar' ? 'كلمة المرور يجب أن تكون 10 أحرف على الأقل' : 'Password must be at least 10 characters');
     }
 
     if (newPassword !== confirmPassword) {
@@ -132,7 +132,7 @@ export default function ResetPassword() {
                   className={`block w-full py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition ${language === 'ar' ? 'pr-10 pl-3' : 'pl-10 pr-3'}`}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={10}
                   autoFocus
                 />
                 <div className={`absolute inset-y-0 flex items-center pointer-events-none ${language === 'ar' ? 'right-0 pr-3' : 'left-0 pl-3'}`}>
@@ -140,7 +140,7 @@ export default function ResetPassword() {
                 </div>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {language === 'ar' ? '6 أحرف على الأقل' : 'At least 6 characters'}
+                {language === 'ar' ? '10 أحرف على الأقل' : 'At least 10 characters'}
               </p>
             </div>
 
@@ -156,7 +156,7 @@ export default function ResetPassword() {
                   className={`block w-full py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm outline-none transition ${language === 'ar' ? 'pr-10 pl-3' : 'pl-10 pr-3'}`}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={10}
                 />
                 <div className={`absolute inset-y-0 flex items-center pointer-events-none ${language === 'ar' ? 'right-0 pr-3' : 'left-0 pl-3'}`}>
                   <Lock className="h-4 w-4 text-slate-400" />

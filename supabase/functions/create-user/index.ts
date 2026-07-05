@@ -1,12 +1,35 @@
 // Deno Edge Function to create new users securely by Managers
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
+import { Redis } from 'https://esm.sh/@upstash/redis@1.25.0'
+import { Ratelimit } from 'https://esm.sh/@upstash/ratelimit@1.0.0'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
 // Initialize Supabase admin client with service role key
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Optional Upstash Redis Rate Limiting
+const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
+const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+
+let ratelimit: Ratelimit | null = null;
+if (redisUrl && redisToken) {
+  try {
+    const redis = new Redis({
+      url: redisUrl,
+      token: redisToken,
+    });
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, '60 s'), // 20 requests per minute
+      analytics: false,
+    });
+  } catch (err) {
+    console.error('Failed to initialize Upstash Redis for rate limiting:', err);
+  }
+}
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('origin') || '';
@@ -38,6 +61,31 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Rate Limiting
+  if (ratelimit) {
+    try {
+      const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+      const authHeader = req.headers.get('Authorization') || '';
+      const limitKey = authHeader ? authHeader.replace('Bearer ', '') : ip;
+      
+      const { success, limit, reset, remaining } = await ratelimit.limit(limitKey);
+      if (!success) {
+        return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': limit.toString(),
+            'X-RateLimit-Remaining': remaining.toString(),
+            'X-RateLimit-Reset': reset.toString(),
+          }
+        });
+      }
+    } catch (limErr) {
+      console.warn('[RateLimit] error:', limErr);
+    }
   }
 
   try {
@@ -103,8 +151,8 @@ serve(async (req) => {
         });
       }
 
-      if (password.length < 6) {
-        return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), {
+      if (password.length < 10) {
+        return new Response(JSON.stringify({ error: 'Password must be at least 10 characters' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -328,8 +376,8 @@ serve(async (req) => {
         }
       }
 
-      if (password && password.length < 6) {
-        return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), {
+      if (password && password.length < 10) {
+        return new Response(JSON.stringify({ error: 'Password must be at least 10 characters' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });

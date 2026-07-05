@@ -1,24 +1,34 @@
 -- ============================================================
--- Database Webhook: Notify user when task is created or updated
--- This trigger calls the send-push Edge Function via pg_net
+-- Migration: Rotate Webhook Secret & Enable Dynamic Vault Storage
 -- ============================================================
 
--- 1. Ensure pg_net extension is enabled
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+-- 1. Create the vault secret if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'webhook_secret') THEN
+    PERFORM vault.create_secret('c9f35d5e2a393fb7b925ccf0c156f6db6a2a3db61a7a1cde89bfbe82b2e88a03', 'webhook_secret');
+  END IF;
+END
+$$;
 
--- 2. Create the trigger function
+-- 2. Re-create the notify_new_task trigger function to pull the secret dynamically from Vault
 CREATE OR REPLACE FUNCTION public.notify_new_task()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions, net
+SET search_path = public, extensions, net, vault, pg_temp
 AS $$
 DECLARE
   payload JSONB;
-  -- The Supabase project URL is public (same as VITE_SUPABASE_URL in .env).
-  -- The Edge Function is deployed with --no-verify-jwt, so no auth header is needed.
+  webhook_secret TEXT;
   edge_url CONSTANT TEXT := 'https://bzsmwmkgmropuadpkcku.supabase.co/functions/v1/send-push';
 BEGIN
+  -- Fetch the rotated secret dynamically from vault decrypted secrets
+  SELECT decrypted_secret INTO webhook_secret
+  FROM vault.decrypted_secrets
+  WHERE name = 'webhook_secret'
+  LIMIT 1;
+
   -- Build the webhook payload matching our Edge Function's expected format
   payload := jsonb_build_object(
     'type', TG_OP,
@@ -42,13 +52,12 @@ BEGIN
   );
 
   -- Send async HTTP POST to the Edge Function via pg_net
-  -- X-Webhook-Secret is managed dynamically. See migration 20260706000000_rotate_webhook_secret.sql
   PERFORM net.http_post(
     url := edge_url,
     body := payload,
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'X-Webhook-Secret', 'REMOVED_SECRET_UPDATED_VIA_VAULT'
+      'X-Webhook-Secret', COALESCE(webhook_secret, '')
     )
   );
 
@@ -60,11 +69,3 @@ EXCEPTION
     RETURN NEW;
 END;
 $$;
-
--- 3. Create the trigger on the tasks table
-DROP TRIGGER IF EXISTS on_task_created_notify ON public.tasks;
-CREATE TRIGGER on_task_created_notify
-  AFTER INSERT OR UPDATE ON public.tasks
-  FOR EACH ROW
-  EXECUTE FUNCTION public.notify_new_task();
-

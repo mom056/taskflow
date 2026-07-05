@@ -3,9 +3,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 import * as webpush from "jsr:@negrel/webpush"
+import { Redis } from 'https://esm.sh/@upstash/redis@1.25.0'
+import { Ratelimit } from 'https://esm.sh/@upstash/ratelimit@1.0.0'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+// Optional Upstash Redis Rate Limiting
+const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
+const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+
+let ratelimit: Ratelimit | null = null;
+if (redisUrl && redisToken) {
+  try {
+    const redis = new Redis({
+      url: redisUrl,
+      token: redisToken,
+    });
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, '60 s'), // 60 requests per minute for webhooks
+      analytics: false,
+    });
+  } catch (err) {
+    console.error('Failed to initialize Upstash Redis for rate limiting:', err);
+  }
+}
 
 // Web Push (VAPID) credentials
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY') || '';
@@ -58,56 +81,61 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
 
   return await crypto.subtle.importKey(
     'pkcs8',
-    binaryDer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    binaryDer.buffer,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
     false,
-    ['sign']
+    ['sign'],
   );
 }
 
-// Generate a signed JWT for Google OAuth2
-async function createSignedJwt(serviceAccount: any): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iss: serviceAccount.client_email,
+// Helper to sign JWT for Google OAuth2
+async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
+  const account = JSON.parse(serviceAccountJson);
+  const jwtHeader = { alg: 'RS256', typ: 'JWT' };
+  const nowSecs = Math.floor(Date.now() / 1000);
+  const jwtClaim = {
+    iss: account.client_email,
     scope: 'https://www.googleapis.com/auth/firebase.messaging',
     aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
+    exp: nowSecs + 3600,
+    iat: nowSecs,
   };
 
-  const encodedHeader = base64urlStr(JSON.stringify(header));
-  const encodedPayload = base64urlStr(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const headerB64 = base64urlStr(JSON.stringify(jwtHeader));
+  const claimB64 = base64urlStr(JSON.stringify(jwtClaim));
+  const signInput = `${headerB64}.${claimB64}`;
 
-  const key = await importPrivateKey(serviceAccount.private_key);
-  const signature = await crypto.subtle.sign(
+  const privateKey = await importPrivateKey(account.private_key);
+  const signatureBuffer = await crypto.subtle.sign(
     'RSASSA-PKCS1-v1_5',
-    key,
-    new TextEncoder().encode(signingInput)
+    privateKey,
+    new TextEncoder().encode(signInput),
   );
 
-  const encodedSignature = base64url(new Uint8Array(signature));
-  return `${signingInput}.${encodedSignature}`;
-}
+  const signatureB64 = base64url(new Uint8Array(signatureBuffer));
+  const jwt = `${signInput}.${signatureB64}`;
 
-// Exchange JWT for an OAuth2 access token
-async function getAccessToken(serviceAccount: any): Promise<string> {
-  const jwt = await createSignedJwt(serviceAccount);
-
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
   });
 
-  const data = await response.json();
-  if (!data.access_token) {
-    throw new Error(`OAuth2 token error: ${JSON.stringify(data)}`);
+  const tokenData = await tokenResponse.json();
+  if (tokenData.error) {
+    throw new Error(`Google OAuth error: ${tokenData.error_description || tokenData.error}`);
   }
-  return data.access_token;
+  return tokenData.access_token;
+}
+
+async function getAccessToken(serviceAccount: any): Promise<string> {
+  return await getGoogleAccessToken(JSON.stringify(serviceAccount));
 }
 
 // ─── Send FCM v1 push notification ───
@@ -185,8 +213,9 @@ serve(async (req) => {
     const webhookSecret = Deno.env.get('WEBHOOK_SECRET') || '';
     const incomingSecret = req.headers.get('X-Webhook-Secret') || '';
 
-    if (webhookSecret && incomingSecret !== webhookSecret) {
-      console.warn('[PushService] Unauthorized webhook request.');
+    // Fail closed: reject if webhookSecret is empty/missing OR incomingSecret does not match
+    if (!webhookSecret || incomingSecret !== webhookSecret) {
+      console.warn('[PushService] Rejected: missing or invalid webhook secret.');
       return new Response(JSON.stringify({ error: 'Unauthorized webhook secret' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }

@@ -39,10 +39,14 @@ BEGIN
     END
   );
 
+  -- X-Webhook-Secret is managed dynamically. See migration 20260706000000_rotate_webhook_secret.sql
   PERFORM net.http_post(
     url := edge_url,
     body := payload,
-    headers := '{"Content-Type": "application/json", "X-Webhook-Secret": "cf089e82-4f36-4d1a-82ee-062db28b936a"}'::jsonb
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'X-Webhook-Secret', 'REMOVED_SECRET_UPDATED_VIA_VAULT'
+    )
   );
 
   RETURN NEW;

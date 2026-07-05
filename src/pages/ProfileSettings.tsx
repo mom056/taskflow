@@ -234,7 +234,7 @@ export default function ProfileSettings() {
   // 3. Update Password
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) return toast.error(language === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف' : 'Password must be at least 6 characters');
+    if (newPassword.length < 10) return toast.error(language === 'ar' ? 'كلمة المرور يجب ألا تقل عن 10 أحرف' : 'Password must be at least 10 characters');
     if (newPassword !== confirmPassword) return toast.error(language === 'ar' ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
 
     setUpdatingPassword(true);
@@ -383,8 +383,8 @@ export default function ProfileSettings() {
     if (!emailRegex.test(newEmpEmail.trim())) {
       return toast.error(language === 'ar' ? 'يرجى إدخال بريد إلكتروني صحيح للموظف' : 'Please enter a valid email address');
     }
-    if (newEmpPassword.length < 6) {
-      return toast.error(language === 'ar' ? 'كلمة المرور للموظف يجب ألا تقل عن 6 أحرف' : 'Password must be at least 6 characters');
+    if (newEmpPassword.length < 10) {
+      return toast.error(language === 'ar' ? 'كلمة المرور للموظف يجب ألا تقل عن 10 أحرف' : 'Password must be at least 10 characters');
     }
 
     setRegistering(true);
@@ -570,7 +570,7 @@ export default function ProfileSettings() {
                 value={newPassword} 
                 onChange={(e) => setNewPassword(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                placeholder={language === 'ar' ? 'أدخل 6 أحرف على الأقل' : 'At least 6 characters'}
+                placeholder={language === 'ar' ? 'أدخل 10 أحرف على الأقل' : 'At least 10 characters'}
                 required
               />
             </div>
@@ -754,7 +754,7 @@ export default function ProfileSettings() {
                   value={newEmpPassword} 
                   onChange={(e) => setNewEmpPassword(e.target.value)} 
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-600 focus:outline-hidden text-sm"
-                  placeholder={language === 'ar' ? 'لا تقل عن 6 أحرف' : 'At least 6 characters'}
+                  placeholder={language === 'ar' ? 'لا تقل عن 10 أحرف' : 'At least 10 characters'}
                   required
                 />
               </div>

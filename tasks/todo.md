@@ -47,3 +47,24 @@
 - [x] **6.2: Tactile Haptic Feedback (التغذية اللمسية بالاهتزاز)**
   - Designed `triggerHaptic` utility routing to `@capacitor/haptics`.
   - Added physical vibration patterns for task transitions, form validations, settings changes, and application crashes.
+
+## Phase 12: Security Hardening & CORS Resolutions (تحصين الأمان وإصلاح CORS) ✅
+
+- [x] **12.1: Webhook Secret Rotation & Fail-Closed Logic (المرحلة 0) ✅**
+  - [x] Deploy `send-push` Edge Function update (fail-closed check).
+  - [x] Set `WEBHOOK_SECRET` in Supabase secrets via CLI using `--project-ref`.
+  - [x] Create database migration `20260706000000_rotate_webhook_secret.sql` updating `notify_new_task()` to use the new secret.
+  - [x] Replace the hardcoded key with comments in all previous migrations.
+- [x] **12.2: Company Tier & Billing Isolation (المرحلة 1) ✅**
+  - [x] Create database migration `20260706010000_isolate_billing_and_prevent_escalation.sql` creating the `company_billing` table and `check_company_insert()` trigger.
+  - [x] Modify `AuthContext.tsx` to query explicit columns for companies (preventing accidental Stripe credential leak).
+- [x] **12.3: Attendance Geofencing & Database Hardening (المرحلة 2) ✅**
+  - [x] Create database migration `20260706020000_attendance_geofencing_and_security_hardening.sql` to calculate Haversine distance on server and auto-correct to `field` if outside HQ (Option A), enforce `created_by = auth.uid()` on task inserts, and set `search_path` on all SECURITY DEFINER functions.
+  - [x] Enforce 10-character password limit in `create-user/index.ts`.
+  - [x] Update frontend validations to require 10-character passwords in `Login.tsx`, `ResetPassword.tsx`, and `ProfileSettings.tsx`.
+- [x] **12.4: Storage Privacy & Advanced Hardening (المرحلة 3) ✅**
+  - [x] Restrict `task-images` bucket to private, drop the public read policy, and add company-restricted RLS.
+  - [x] Refactor client components (`useTasks.ts` batch signed URL resolution) to fetch signed URLs for task images instead of using public URLs directly.
+  - [x] Inject task status transition rules in `check_task_update` trigger.
+  - [x] Remove `get_user_count` RPC from `AuthContext.tsx` and client code, and drop the DB RPC function.
+  - [x] Audit dependencies and verify code runs smoothly.

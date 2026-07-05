@@ -73,7 +73,7 @@ export const ar = {
     noAccount: 'ليس لديك حساب؟ سجل شركتك',
     haveAccount: 'لديك حساب بالفعل؟ دخول',
     invalidEmail: 'يرجى إدخال بريد إلكتروني صحيح',
-    passwordLength: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل',
+    passwordLength: 'كلمة المرور يجب أن تكون 10 أحرف على الأقل',
     signInSuccess: 'تم تسجيل الدخول بنجاح',
     signUpSuccess: 'تم إنشاء الحساب بنجاح',
   },

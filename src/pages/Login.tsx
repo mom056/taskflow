@@ -80,7 +80,7 @@ export default function Login() {
     if (!emailRegex.test(email.trim())) {
       return toast.error(t.login.invalidEmail);
     }
-    if (password.length < 6) {
+    if (password.length < 10) {
       return toast.error(t.login.passwordLength);
     }
 
