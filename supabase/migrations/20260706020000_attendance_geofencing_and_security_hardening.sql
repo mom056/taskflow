@@ -96,6 +96,28 @@ CREATE POLICY "tasks_insert_policy" ON public.tasks
     )
   );
 
+-- Create or ensure check_employee_limit exists
+CREATE OR REPLACE FUNCTION public.check_employee_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  current_count INT;
+  max_allowed INT;
+BEGIN
+  IF NEW.role = 'employee' THEN
+    SELECT max_employees INTO max_allowed FROM public.companies WHERE id = NEW.company_id;
+    SELECT COUNT(*) INTO current_count FROM public.users WHERE company_id = NEW.company_id AND role = 'employee';
+    IF current_count >= max_allowed THEN
+      RAISE EXCEPTION 'تم تجاوز الحد الأقصى للموظفين المسموح به لهذه الشركة (% موظف).', max_allowed;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- 3. Lock down search paths on all existing SECURITY DEFINER functions to prevent search path hijacking
 ALTER FUNCTION public.get_my_company_id() SET search_path = public, pg_temp;
 ALTER FUNCTION public.is_super_admin() SET search_path = public, pg_temp;
