@@ -469,14 +469,12 @@ export default function EmployeeDashboard() {
     setImageFile(null); setImagePreview(task.imageUrl || null);
   };
 
-  // Merge offline queue items for visual display
-  const getMergedTasks = () => {
+  // Merge offline queue items for visual display — wrapped in useMemo to avoid
+  // recomputing on every render when tasks and queue have not changed.
+  const allMergedTasks = useMemo(() => {
     const merged = [...tasks];
-    
-    // Read from hook state (no direct localStorage dependency)
-    const offlineQueue: QueueItem[] = queue;
-    
-    offlineQueue.forEach(item => {
+
+    queue.forEach(item => {
       if (item.type === 'create_task') {
         const exists = merged.some(t => t.title === item.payload.title && t.createdAt === item.payload.created_at);
         if (!exists) {
@@ -510,11 +508,10 @@ export default function EmployeeDashboard() {
         }
       }
     });
-    
-    return merged;
-  };
 
-  const allMergedTasks = getMergedTasks();
+    return merged;
+  }, [tasks, queue]);
+
   const activeTasks = allMergedTasks.filter(t => t.status !== 'completed');
   const completedTasks = allMergedTasks.filter(t => t.status === 'completed');
   const displayTasks = activeTab === 'active' ? activeTasks : completedTasks;
@@ -689,8 +686,8 @@ export default function EmployeeDashboard() {
               )}
             </div>
             <div>
-              <div className="text-sm font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
-                {activeTab === 'active' ? (language === 'ar' ? 'مهامي النشطة' : 'My Active Tasks') : (language === 'ar' ? 'المنجزة' : 'Completed')}
+              <div className="text-sm font-extrabold flex items-center gap-1.5 text-slate-900 dark:text-slate-100 tracking-tight">
+                {getGreeting()}، {profile?.name?.split(' ')[0] || user?.email?.split('@')[0]}
                 {!isOnline && (
                   <span className="inline-flex items-center gap-0.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
                     <CloudOff className="w-2.5 h-2.5" />
@@ -699,7 +696,7 @@ export default function EmployeeDashboard() {
                 )}
               </div>
               <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                {profile?.name || user?.email?.split('@')[0]} {company ? `| ${company.name}` : ''}
+                {t.common.appName}{company ? ` | ${company.name}` : ''}
               </div>
             </div>
           </Link>
