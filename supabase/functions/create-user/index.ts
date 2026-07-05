@@ -18,10 +18,13 @@ function getCorsHeaders(req: Request) {
     "ionic://localhost",
   ];
   if (productionOrigin) {
-    allowedOrigins.push(productionOrigin);
+    productionOrigin.split(',').forEach(o => allowedOrigins.push(o.trim()));
   }
   
-  const isAllowed = allowedOrigins.includes(origin) || origin.startsWith('http://localhost:');
+  const isAllowed = allowedOrigins.includes(origin) || 
+                    origin.startsWith('http://localhost:') ||
+                    origin.endsWith('.vercel.app') ||
+                    origin.startsWith('https://taskflow-');
   
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : allowedOrigins[0],
