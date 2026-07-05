@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowRight, Camera, Save, Lock, UserPlus, Shield, CheckCircle, MapPin } from 'lucide-react';
@@ -15,6 +16,7 @@ import { useGeoLocation } from '../hooks/useGeoLocation';
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { user, profile, refreshRole, company, signOut } = useAuth();
   const { getCoordinates, loading: isLocating } = useGeoLocation();
   const { logActivity } = useActivityLog();
@@ -414,6 +416,9 @@ export default function ProfileSettings() {
       setNewEmpName('');
       setNewEmpEmail('');
       setNewEmpPassword('');
+      
+      // Invalidate users queries cache to refresh employee list in manager dashboard
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
       triggerHaptic('error');
       toast.error(err.message || (language === 'ar' ? 'فشل تسجيل الحساب' : 'Failed to register account'));
