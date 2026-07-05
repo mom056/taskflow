@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAttendance } from '../hooks/useAttendance';
 import { Company } from '../types';
 import { LocationCoords } from '../hooks/useGeoLocation';
-import { Clock, MapPin, CheckCircle, Navigation, AlertCircle, HelpCircle } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, Navigation, Plus, Minus, FileText } from 'lucide-react';
+import { useTranslation } from '../contexts/LanguageContext';
 import toast from 'react-hot-toast';
 
 interface AttendanceCardProps {
@@ -38,10 +39,42 @@ export default function AttendanceCard({
   isOnline,
   addToQueue
 }: AttendanceCardProps) {
+  const { language, t } = useTranslation();
   const { checkIn, checkOut, activeRecord, isLoading } = useAttendance();
   const [notes, setNotes] = useState('');
+  const [showNotes, setShowNotes] = useState(false);
   const [liveHours, setLiveHours] = useState('00:00:00');
   const [checking, setChecking] = useState(false);
+
+  // Live clock states for before check-in
+  const [currentTime, setCurrentTime] = useState('');
+  const [currentDate, setCurrentDate] = useState('');
+
+  // Update clock & date every second
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        })
+      );
+      setCurrentDate(
+        now.toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long'
+        })
+      );
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [language]);
 
   // Live Timer for checked-in shift duration
   useEffect(() => {
@@ -71,7 +104,7 @@ export default function AttendanceCard({
       }
 
       if (!coords) {
-        toast.error('عذراً، يجب تفعيل خدمة تحديد الموقع الجغرافي GPS لتسجيل الحضور.');
+        toast.error(t.attendance.gpsRequired);
         setChecking(false);
         return;
       }
@@ -107,6 +140,7 @@ export default function AttendanceCard({
         };
         await addToQueue('check_in', checkInPayload);
         setNotes('');
+        setShowNotes(false);
         setChecking(false);
         return;
       }
@@ -118,9 +152,10 @@ export default function AttendanceCard({
         notes: notes || undefined
       });
       setNotes('');
+      setShowNotes(false);
     } catch (err: any) {
       console.error(err);
-      toast.error('حدث خطأ أثناء تسجيل الحضور');
+      toast.error(t.attendance.errorCheckIn);
     } finally {
       setChecking(false);
     }
@@ -161,7 +196,7 @@ export default function AttendanceCard({
       });
     } catch (err: any) {
       console.error(err);
-      toast.error('حدث خطأ أثناء تسجيل الانصراف');
+      toast.error(t.attendance.errorCheckOut);
     } finally {
       setChecking(false);
     }
@@ -187,9 +222,14 @@ export default function AttendanceCard({
       company.hqLongitude
     );
     isNearHQ = dist <= (company.hqRadiusMeters || 200);
+
+    const kmText = language === 'ar' ? 'كم' : 'km';
+    const metersText = language === 'ar' ? 'متر' : 'meters';
+    const awayText = language === 'ar' ? 'عن مقر العمل' : 'away from workplace';
+    const prefix = language === 'ar' ? 'تبعد ' : '';
     distanceToHQText = dist >= 1000 
-      ? `تبعد ${(dist / 1000).toFixed(2)} كم عن مقر العمل`
-      : `تبعد ${Math.round(dist)} متر عن مقر العمل`;
+      ? `${prefix}${(dist / 1000).toFixed(2)} ${kmText} ${awayText}`
+      : `${prefix}${Math.round(dist)} ${metersText} ${awayText}`;
   }
 
   return (
@@ -201,108 +241,131 @@ export default function AttendanceCard({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5 text-indigo-400" />
-          <h3 className="font-semibold text-lg">تحضير الدوام اليومي</h3>
+          <h3 className="font-semibold text-base">{t.attendance.title}</h3>
         </div>
         {!activeRecord && (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md text-white/80 rounded-full text-xs font-semibold">
-            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-            غير محضر
+          <span className="flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md text-white/80 rounded-full text-[10px] font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            {t.attendance.notCheckedIn}
           </span>
         )}
         {activeRecord && (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 backdrop-blur-md text-emerald-400 rounded-full text-xs font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            على رأس العمل
+          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 backdrop-blur-md text-emerald-400 rounded-full text-[10px] font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+            {t.attendance.checkedIn}
           </span>
         )}
       </div>
 
       {!activeRecord ? (
         <div className="space-y-4">
-          <p className="text-slate-300 text-sm">
-            يرجى تسجيل الحضور للبدء في توثيق ساعات الدوام الرسمي.
+          {/* Elegant clock & date layout */}
+          <div className="py-2 text-center bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xs">
+            <div className="font-mono text-3xl font-extrabold tracking-wider text-indigo-300 drop-shadow-md select-none">
+              {currentTime || '00:00:00'}
+            </div>
+            <div className="text-slate-400 text-[10px] mt-0.5 font-medium">
+              {currentDate}
+            </div>
+          </div>
+
+          <p className="text-slate-300 text-xs text-center leading-relaxed">
+            {t.attendance.description}
           </p>
 
           {distanceToHQText && (
-            <div className={`flex items-center gap-2 text-xs px-3 py-2.5 rounded-2xl ${isNearHQ ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>
-              <MapPin className="w-4 h-4 shrink-0" />
-              <span>{distanceToHQText} ({isNearHQ ? 'داخل النطاق الجغرافي للمقر' : 'خارج نطاق مقر العمل'})</span>
+            <div className={`flex items-center gap-2 text-[10px] px-3 py-2.5 rounded-xl ${isNearHQ ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-semibold leading-snug">
+                {distanceToHQText} ({isNearHQ ? (language === 'ar' ? 'داخل النطاق الجغرافي للمقر' : 'Within range') : (language === 'ar' ? 'خارج نطاق مقر العمل' : 'Outside range')})
+              </span>
             </div>
           )}
 
-          {/* Notes area */}
-          <div>
-            <textarea
-              className="w-full px-4 py-3 bg-white/10 border border-white/15 rounded-2xl text-white placeholder-white/50 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all resize-none"
-              placeholder="إضافة ملاحظة عند الحضور (اختياري)..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
+          {/* Toggle note area */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowNotes(!showNotes)}
+              className="flex items-center gap-1.5 text-xs text-indigo-400 font-semibold bg-transparent border-none outline-none cursor-pointer hover:text-indigo-300"
+            >
+              {showNotes ? <Minus className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              <span>{showNotes ? t.attendance.hideNote : t.attendance.addNote}</span>
+            </button>
+
+            {showNotes && (
+              <textarea
+                className="w-full px-4 py-3 bg-white/10 border border-white/15 rounded-2xl text-white placeholder-white/50 text-xs focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all resize-none animate-fadeIn"
+                placeholder={t.attendance.notePlaceholder}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+              />
+            )}
           </div>
 
           <button
             onClick={handleCheckIn}
             disabled={checking || isLocating}
-            className="w-full relative flex items-center justify-center gap-2 px-6 py-4 bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-500/25 active:scale-98"
+            className="w-full relative flex items-center justify-center gap-2 px-6 py-3.5 bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-500/25 active:scale-98 cursor-pointer border-none text-xs"
           >
             {checking || isLocating ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                جاري تحديد الموقع وتسجيل الحضور...
+                {t.attendance.checkingIn}
               </span>
             ) : (
               <>
-                <Navigation className="w-5 h-5" />
-                <span>تسجيل حضور العمل</span>
+                <Navigation className="w-4.5 h-4.5" />
+                <span>{t.attendance.checkInBtn}</span>
               </>
             )}
           </button>
         </div>
       ) : (
-        <div className="space-y-5">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
-            <span className="block text-slate-400 text-xs mb-1">وقت العمل المنقضي اليوم</span>
-            <span className="font-mono text-3xl font-bold tracking-wider text-indigo-300">{liveHours}</span>
+        <div className="space-y-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 text-center">
+            <span className="block text-slate-400 text-[10px] mb-1">{t.attendance.hoursElapsed}</span>
+            <span className="font-mono text-3xl font-extrabold tracking-wider text-indigo-300">{liveHours}</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-              <span className="block text-slate-400 mb-1">توقيت الحضور</span>
-              <span className="font-semibold">
-                {new Date(activeRecord.checkInTime).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+          <div className="grid grid-cols-2 gap-3 text-[10px]">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
+              <span className="block text-slate-400 mb-1">{t.attendance.checkInTimeLabel}</span>
+              <span className="font-bold">
+                {new Date(activeRecord.checkInTime).toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-              <span className="block text-slate-400 mb-1">حالة التحضير</span>
-              <span className={`font-semibold ${activeRecord.checkInType === 'office' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {activeRecord.checkInType === 'office' ? 'حضور بالمقر' : 'حضور ميداني'}
-                {activeRecord.isLate && ' (متأخر)'}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
+              <span className="block text-slate-400 mb-1">{t.attendance.statusLabel}</span>
+              <span className={`font-bold ${activeRecord.checkInType === 'office' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {activeRecord.checkInType === 'office' ? t.attendance.officeCheckIn : t.attendance.fieldCheckIn}
+                {activeRecord.isLate && ` (${t.attendance.late})`}
               </span>
             </div>
           </div>
 
           {activeRecord.notes && (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-xs">
-              <span className="block text-slate-400 mb-1">ملاحظة الحضور:</span>
-              <p className="text-slate-200 italic">"{activeRecord.notes}"</p>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 text-[10px]">
+              <span className="block text-slate-400 mb-0.5">{t.attendance.noteLabel}</span>
+              <p className="text-slate-200 italic m-0">"{activeRecord.notes}"</p>
             </div>
           )}
 
           <button
             onClick={handleCheckOut}
             disabled={checking}
-            className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-linear-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/25 active:scale-98"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-linear-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/25 active:scale-98 cursor-pointer border-none text-xs"
           >
             {checking ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                جاري تسجيل الانصراف...
+                {t.attendance.checkingOut}
               </span>
             ) : (
               <>
-                <CheckCircle className="w-5 h-5" />
-                <span>تسجيل انصراف العمل</span>
+                <CheckCircle className="w-4.5 h-4.5" />
+                <span>{t.attendance.checkOutBtn}</span>
               </>
             )}
           </button>

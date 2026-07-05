@@ -781,14 +781,17 @@ Complete redesign of the Landing Page to reflect Phase 10 features and eliminate
 ### Component 4: Theme & Color Contrast Tweaks
 
 #### [MODIFY] [index.css](file:///d:/CP+/taskflow/src/index.css)
+
 - Add `.bg-white-forced` and `.text-slate-900-forced` utility classes to bypass the global `.dark` color-override styles for components that must remain high-contrast.
 - Clean up scrollbar theme rules to adapt smoothly to dark and light background states.
 
 #### [MODIFY] [LandingPage.tsx](file:///d:/CP+/taskflow/src/pages/LandingPage.tsx)
+
 - Wrap the QR Code container with `style={{ backgroundColor: '#ffffff' }}` or `.bg-white-forced` to ensure it is always 100% white and easily scannable on all devices.
 - Hardcode the Landing Page UI elements to static Slate colors to shield them from getting messed up by the global `.dark` classes when logged out.
 
 #### [MODIFY] [WeeklyPerformanceChart.tsx](file:///d:/CP+/taskflow/src/components/charts/WeeklyPerformanceChart.tsx) (and other Recharts instances)
+
 - Apply adaptive text colors to Recharts `<XAxis />`, `<YAxis />`, and `<Tooltip />` labels to ensure absolute readability when switching between light and dark themes.
 
 ---
@@ -802,3 +805,112 @@ Complete redesign of the Landing Page to reflect Phase 10 features and eliminate
 3. Navigate from Landing → Login → Dashboard → verify **font and color consistency** across all transitions
 4. Verify Arabic RTL layout renders correctly with proper text alignment
 5. Test the APK download link on the Download section
+
+# 🔄 خطة ترقية تجربة الهاتف — Employee Mobile Premium UX
+
+## المشكلة
+
+بعد مراجعة شاملة لكود التطبيق، التجربة الحالية **تعمل وظيفياً** لكنها لا تشعر المستخدم أنه يستخدم تطبيق هاتف احترافي. التطبيق يشبه موقع ويب مفتوح على الهاتف أكثر من كونه تطبيق Native.
+
+---
+
+## 🔍 المشاكل المكتشفة من مراجعة الكود
+
+### 1. `AttendanceCard.tsx` — بطاقة تسجيل الحضور
+
+> [!CAUTION]
+> **كل النصوص مكتوبة بالعربية فقط بشكل ثابت (hardcoded)**، بينما التطبيق يدعم العربية والإنجليزية. هذا خلل معماري.
+
+| المشكلة                         | التفاصيل                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| ❌ لا يدعم تبديل اللغة          | النصوص مثل `"تحضير الدوام اليومي"`, `"غير محضر"`, `"تسجيل حضور العمل"` كلها hardcoded بالعربية |
+| ❌ لا يستخدم `useTranslation()` | الـ component لا يستقبل أي language context                                                    |
+| ❌ حقل الملاحظات ظاهر دائماً    | الـ textarea يأخذ مساحة حتى لو المستخدم لن يكتب ملاحظة                                         |
+| ❌ لا يعرض الوقت الحالي         | قبل تسجيل الحضور لا يُظهر الساعة الحالية                                                       |
+| ❌ نص المسافة بالعربي فقط       | `"تبعد X متر عن مقر العمل"`                                                                    |
+
+### 2. `EmployeeDashboard.tsx` — الشاشة الرئيسية
+
+| المشكلة                             | التفاصيل                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| ❌ لا يوجد ترحيب                    | التطبيقات الاحترافية تُرحّب بالمستخدم: "صباح الخير, أحمد"                |
+| ❌ لا يوجد ملخص يومي                | لا يوجد عرض سريع لـ "أنجزت 3 من 7 مهام اليوم"                            |
+| ❌ العنوان الرئيسي مكرر             | Header يعرض "مهامي النشطة" والـ Segmented Control أيضاً يعرض "مهام نشطة" |
+| ❌ منطقة الأزرار في البطاقات مزدحمة | قسم "تغيير الحالة" به أزرار كثيرة صغيرة في مساحة ضيقة                    |
+| ❌ الحالة الفارغة بسيطة جداً        | أيقونة + سطر نص فقط، بدون رسم توضيحي أو CTA                              |
+
+### 3. تجربة عامة
+
+| المشكلة                   | التفاصيل                          |
+| ------------------------- | --------------------------------- |
+| ❌ لا يوجد تحية زمنية     | صباح الخير / مساء الخير حسب الوقت |
+| ❌ لا يوجد شريط تقدم يومي | يفتقر لإحساس الإنجاز والتحفيز     |
+
+---
+
+## ✅ التحسينات المقترحة
+
+### المرحلة 1: AttendanceCard — دعم ثنائي اللغة + تحسين UX
+
+#### [MODIFY] [AttendanceCard.tsx](file:///d:/CP+/taskflow/src/components/AttendanceCard.tsx)
+
+1. **إضافة `useTranslation()`** واستبدال كل النصوص الثابتة بنصوص ديناميكية حسب اللغة
+2. **إضافة ساعة حية** قبل تسجيل الحضور (عرض الوقت الحالي بتنسيق كبير أنيق)
+3. **إخفاء حقل الملاحظات** افتراضياً وإظهاره بزر "إضافة ملاحظة" صغير
+4. **دعم RTL/LTR** في تخطيط العناصر الداخلية
+
+---
+
+### المرحلة 2: EmployeeDashboard — ترحيب + ملخص يومي
+
+#### [MODIFY] [EmployeeDashboard.tsx](file:///d:/CP+/taskflow/src/pages/EmployeeDashboard.tsx)
+
+1. **إضافة قسم ترحيب ذكي** أعلى المحتوى (داخل `activeTab === 'active'`):
+   - تحية زمنية: صباح الخير / مساء الخير
+   - اسم الموظف
+   - تاريخ اليوم
+
+2. **إضافة شريط تقدم يومي** بعد الترحيب:
+   - Progress bar دائري أو خطي يعرض نسبة الإنجاز
+   - "أنجزت 3 من 7 مهام" بشكل مرئي
+   - يحسب من `activeTasks.length` و `completedTasks.length`
+
+3. **تحسين Mobile Header**:
+   - عرض التحية بدلاً من "مهامي النشطة" (المكررة مع Segmented Control)
+   - إبقاء Subtitle كاسم الشركة فقط
+
+4. **تحسين بطاقات المهام**:
+   - تبسيط منطقة الأزرار — إزالة label "تغيير الحالة"
+   - جعل الأزرار أكبر وأوضح
+   - إضافة أيقونة الحالة الحالية بشكل أبرز
+
+5. **تحسين الحالة الفارغة**:
+   - رسالة تحفيزية أوضح
+   - زر CTA لإضافة مهمة
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+>
+> 1. هل تريد أن يكون الترحيب يعرض صورة الموظف الشخصية بجانب الاسم في قسم الترحيب؟
+> 2. هل تريد شريط التقدم دائري (مثل Apple Watch) أم خطي (Progress Bar عادي)؟
+> 3. هل تريد إضافة أصوات أو اهتزازات (Haptic Feedback) عند تسجيل الحضور والانصراف؟
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+```bash
+npx tsc --noEmit          # TypeScript type-check
+npm run cap:build         # Capacitor build + sync
+```
+
+### Manual Verification
+
+- مراجعة الواجهة بالعربية والإنجليزية للتأكد من عدم وجود نصوص ثابتة
+- اختبار تسجيل الحضور في كلتا اللغتين
+- التأكد من ظهور قسم الترحيب وشريط التقدم بشكل صحيح

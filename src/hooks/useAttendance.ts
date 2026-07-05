@@ -2,10 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { Attendance } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from '../contexts/LanguageContext';
 import toast from 'react-hot-toast';
 
 export function useAttendance(employeeId?: string) {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const fetchAttendance = async () => {
@@ -64,10 +66,10 @@ export function useAttendance(employeeId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
-      toast.success('تم تسجيل الحضور بنجاح ⏰');
+      toast.success(`${t.attendance.checkInSuccess} ⏰`);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'فشل تسجيل الحضور');
+      toast.error(err.message || t.attendance.errorCheckIn);
     }
   });
 
@@ -86,10 +88,10 @@ export function useAttendance(employeeId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
-      toast.success('تم تسجيل الانصراف بنجاح 👋');
+      toast.success(`${t.attendance.checkOutSuccess} 👋`);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'فشل تسجيل الانصراف');
+      toast.error(err.message || t.attendance.errorCheckOut);
     }
   });
 

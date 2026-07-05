@@ -96,6 +96,14 @@ export default function EmployeeDashboard() {
       });
   }, [getCoordinates]);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) {
+      return t.attendance.greetingMorning;
+    }
+    return t.attendance.greetingEvening;
+  };
+
   // Check for in-app updates on startup (cached for 24 hours to prevent GitHub API rate limits)
   useEffect(() => {
     const checkUpdates = async () => {
@@ -112,7 +120,7 @@ export default function EmployeeDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestTag = data.tag_name; // e.g., "v1.4.0"
-        const localVersion = 'v2.0.9'; // current build version
+        const localVersion = 'v2.1.1'; // current build version
 
         // Record check timestamp
         localStorage.setItem('last_version_check_time', now.toString());
@@ -1086,48 +1094,50 @@ export default function EmployeeDashboard() {
                             </div>
                           )}
 
-                          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide m-0">{language === 'ar' ? 'تغيير الحالة' : 'Change Status'}</p>
-                          <div className={`flex gap-2 flex-wrap ${language === 'en' ? 'flex-row' : ''}`}>
-                            {(task.status === 'new' || task.status === 'pending') && (
-                              <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                                disabled={updatingTaskId !== null}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all cursor-pointer disabled:opacity-50">
-                                {updatingTaskId === task.id ? (
-                                  <span className="w-3.5 h-3.5 border-2 border-amber-700 dark:border-amber-400 border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <RefreshCcw className="w-3.5 h-3.5" />
-                                )}
-                                <span>{language === 'ar' ? 'بدء العمل' : 'Start Task'}</span>
-                              </button>
-                            )}
-                            {task.status === 'in_progress' && (
-                              <>
-                                <button onClick={() => handleUpdateStatus(task.id, 'completed')}
+                          <div className="flex items-center justify-between gap-2 w-full pt-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(task.status === 'new' || task.status === 'pending') && (
+                                <button onClick={() => handleUpdateStatus(task.id, 'in_progress')}
                                   disabled={updatingTaskId !== null}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all cursor-pointer disabled:opacity-50">
                                   {updatingTaskId === task.id ? (
-                                    <span className="w-3.5 h-3.5 border-2 border-green-700 dark:border-green-400 border-t-transparent rounded-full animate-spin" />
+                                    <span className="w-3 bg-amber-700 dark:bg-amber-400 aspect-square rounded-full animate-ping" />
                                   ) : (
-                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    <RefreshCcw className="w-3.5 h-3.5" />
                                   )}
-                                  <span>{language === 'ar' ? 'اكتمل' : 'Complete'}</span>
+                                  <span>{language === 'ar' ? 'بدء العمل' : 'Start'}</span>
                                 </button>
-                                <button onClick={() => handleUpdateStatus(task.id, 'pending')}
-                                  disabled={updatingTaskId !== null}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all cursor-pointer disabled:opacity-50">
-                                  {updatingTaskId === task.id ? (
-                                    <span className="w-3.5 h-3.5 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin" />
-                                  ) : (
-                                    <Hand className="w-3.5 h-3.5" />
-                                  )}
-                                  <span>{language === 'ar' ? 'تعليق' : 'Suspend'}</span>
-                                </button>
-                              </>
-                            )}
+                              )}
+                              {task.status === 'in_progress' && (
+                                <>
+                                  <button onClick={() => handleUpdateStatus(task.id, 'completed')}
+                                    disabled={updatingTaskId !== null}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                    {updatingTaskId === task.id ? (
+                                      <span className="w-3 bg-green-700 dark:bg-green-400 aspect-square rounded-full animate-ping" />
+                                    ) : (
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>{language === 'ar' ? 'اكتمل' : 'Complete'}</span>
+                                  </button>
+                                  <button onClick={() => handleUpdateStatus(task.id, 'pending')}
+                                    disabled={updatingTaskId !== null}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all cursor-pointer disabled:opacity-50">
+                                    {updatingTaskId === task.id ? (
+                                      <span className="w-3 bg-red-600 dark:bg-red-400 aspect-square rounded-full animate-ping" />
+                                    ) : (
+                                      <Hand className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>{language === 'ar' ? 'تعليق' : 'Suspend'}</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
                             <button onClick={() => openNotesModal(task)}
                               disabled={updatingTaskId !== null}
-                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50 ${language === 'ar' ? 'ml-auto' : 'mr-auto'}`}>
-                              <Camera className="w-3.5 h-3.5" />{language === 'ar' ? 'صورة / ملاحظة' : 'Photo / Note'}
+                              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-none disabled:opacity-50 shrink-0">
+                              <Camera className="w-3.5 h-3.5" />
+                              <span>{language === 'ar' ? 'إرفاق' : 'Attach'}</span>
                             </button>
                           </div>
                         </div>
@@ -1137,11 +1147,33 @@ export default function EmployeeDashboard() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-xs">
-                {activeTab === 'active'
-                  ? <><ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-400 text-sm">{language === 'ar' ? 'لا توجد مهام نشطة — أضف مهمتك الأولى' : 'No active tasks found'}</p></>
-                  : <><CheckSquare className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-400 text-sm">{language === 'ar' ? 'لا توجد مهام منجزة بعد' : 'No completed tasks yet'}</p></>
-                }
+              <div className="text-center py-12 px-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/60 shadow-xs flex flex-col items-center justify-center">
+                {activeTab === 'active' ? (
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
+                      <ClipboardList className="w-8 h-8" />
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-xs max-w-xs leading-relaxed m-0 font-semibold text-center">
+                      {t.attendance.emptyStateDesc}
+                    </p>
+                    <button
+                      onClick={() => setTaskFormOpen(true)}
+                      className="mt-4 flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-none"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? 'إنشاء مهمة جديدة' : 'Create New Task'}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
+                      <CheckSquare className="w-8 h-8" />
+                    </div>
+                    <p className="text-slate-400 text-xs m-0 font-semibold">
+                      {t.dashboard.noTasksCompleted}
+                    </p>
+                  </>
+                )}
               </div>
             )}
             </div>
