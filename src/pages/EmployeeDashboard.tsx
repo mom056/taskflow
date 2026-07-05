@@ -830,7 +830,7 @@ export default function EmployeeDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       onClick={() => setVisitModalOpen(true)}
-                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
+                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:-translate-y-px"
                     >
                       <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
                         <Briefcase className="w-5 h-5" />
@@ -839,7 +839,7 @@ export default function EmployeeDashboard() {
                     </button>
                     <button
                       onClick={() => setLeaveModalOpen(true)}
-                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:translate-y-[-1px]"
+                      className="flex flex-col items-center justify-center gap-2.5 p-4 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/40 border border-slate-100 dark:border-slate-700/60 rounded-2xl font-bold text-xs text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer hover:-translate-y-px"
                     >
                       <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
                         <CalendarDays className="w-5 h-5" />
