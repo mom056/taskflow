@@ -17,7 +17,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),
     ],
-    tracesSampleRate: 1.0,
+    tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
     tracePropagationTargets: ['localhost', /^https:\/\/bzsmwmkgmropuadpkcku\.supabase\.co/],
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,

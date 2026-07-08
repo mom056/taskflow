@@ -7,7 +7,7 @@
   </p>
   
   <p align="center">
-    <img src="https://img.shields.io/badge/Version-1.3.3-blue.svg?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/Version-2.2.0-blue.svg?style=flat-square" alt="Version" />
     <img src="https://img.shields.io/badge/Platform-PWA%20%7C%20Android%20%7C%20iOS-brightgreen.svg?style=flat-square" alt="Platforms" />
     <img src="https://img.shields.io/badge/Backend-Supabase%20%7C%20Deno-emerald.svg?style=flat-square" alt="Backend" />
     <img src="https://img.shields.io/badge/Security-Production--Grade-success.svg?style=flat-square" alt="Security" />
@@ -44,7 +44,7 @@ graph TD
 * **تحديد السعة والحدود:** نظام محاسبة ديناميكي يمنع تخطي الحد الأقصى للموظفين المسموح به لكل شركة بناءً على باقة الاشتراك المفعلة.
 
 ### 📱 ميزات الهواتف المتقدمة (Native Shell Features)
-* **المصادقة الحيوية (Biometric Login):** تفعيل الدخول السريع بالبصمة (Passkeys / FaceID) مع حفظ الجلسات بشكل مشفر محلياً.
+* **المصادقة الحيوية (Biometric Login):** تفعيل الدخول السريع بالبصمة (Passkeys / FaceID) مع حفظ الجلسات محلياً على الجهاز.
 * **التغذية اللمسية التفاعلية (Haptics):** اهتزازات خفيفة ومحسوسة تحاكي التطبيقات النيتيف عند تنفيذ الإجراءات أو حدوث الأخطاء.
 * **الروابط العميقة (Deep Linking):** دعم فتح روابط استرداد كلمة المرور المنسية مباشرة داخل التطبيق وتمرير الرموز تلقائياً.
 * **تصدير التقارير المتوافق (Native Sharing):** توليد تقارير PDF ومشاركتها فورياً عبر نافذة المشاركة الرسمية في الهاتف (Share Sheet) بدلاً من النوافذ المنبثقة التقليدية.

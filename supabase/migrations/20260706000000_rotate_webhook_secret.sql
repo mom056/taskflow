@@ -2,11 +2,12 @@
 -- Migration: Rotate Webhook Secret & Enable Dynamic Vault Storage
 -- ============================================================
 
--- 1. Create the vault secret if it doesn't exist
+-- 1. Notice manually seeded vault secret requirement
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'webhook_secret') THEN
-    PERFORM vault.create_secret('c9f35d5e2a393fb7b925ccf0c156f6db6a2a3db61a7a1cde89bfbe82b2e88a03', 'webhook_secret');
+    -- The actual secret value is seeded manually via CLI or SQL Editor to prevent leakage in git.
+    RAISE NOTICE 'webhook_secret not found in vault. Please seed it manually.';
   END IF;
 END
 $$;
